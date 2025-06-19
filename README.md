@@ -28,7 +28,7 @@ O projeto será desenvolvido em etapas, com funcionalidades adicionais (como con
 ---
 
 ##  Estrutura do projeto
-
+```
 balance-bot/
 │
 ├── README.md
@@ -61,7 +61,7 @@ balance-bot/
 ├── basic_pid_test/
 ├── mpu_test/
 └── simple_motor_control/
-
+```
 ---
 
 ## Roadmap do Projeto
