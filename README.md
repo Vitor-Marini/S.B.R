@@ -31,36 +31,36 @@ O projeto será desenvolvido em etapas, com funcionalidades adicionais (como con
 
 balance-bot/
 │
-├──  README.md
-├──  LICENSE
-├──  .gitignore
+├── README.md
+├── LICENSE
+├── .gitignore
 │
-├── hardware/                   
-│   ├── schematics/             
-│   ├── 3d-models/              
-│   ├── images/                 
-│   └── components_list.txt   
+├── hardware/
+│   ├── schematics/
+│   ├── 3d-models/
+│   ├── images/
+│   └── components_list.txt
 │
-├── firmware/                   
-│   ├── robot/                   
-│   └── remote/                 
+├── firmware/
+│   ├── robot/
+│   └── remote/
 │
-├── software/                   
-│   └── data-analyzer/            
+├── software/
+│   └── data-analyzer/
 │       └── (e.g., plot_csv.py or React app)
 │
-├── data/                       
-│   ├── examples/               
-│   └── training/               
+├── data/
+│   ├── examples/
+│   └── training/
 │
-├── docs/                       
+├── docs/
 │   ├── project_description.md
-│   └──references.md
+│   └── references.md
 │
-└── tests/                
-    ├── basic_pid_test/
-    ├── mpu_test/
-    └── simple_motor_control/
+└── tests/
+├── basic_pid_test/
+├── mpu_test/
+└── simple_motor_control/
 
 ---
 
