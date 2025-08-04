@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard J.E.C.A.</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #111; color: #eee; }
+    canvas { background: #222; border-radius: 8px; }
+    .slider-container { margin-top: 20px; }
+    label { display: block; margin-top: 10px; }
+    input[type=range] { width: 100%; }
+    #status { margin-bottom: 10px; }
+    button { margin-top: 20px; padding: 10px 20px; background: #0af; color: #000; border: none; border-radius: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>J.E.C.A. - Dashboard PID</h2>
+  <p id="status">Conectando ao robô...</p>
+  <canvas id="angleChart" width="600" height="300"></canvas>
+
+  <div class="slider-container">
+    <label>Kp: <span id="kpVal">0</span><input type="range" id="kp" min="0" max="50" step="0.1"></label>
+    <label>Ki: <span id="kiVal">0</span><input type="range" id="ki" min="0" max="10" step="0.1"></label>
+    <label>Kd: <span id="kdVal">0</span><input type="range" id="kd" min="0" max="20" step="0.1"></label>
+    <label>Setpoint: <span id="spVal">0</span><input type="range" id="setpoint" min="-45" max="45" step="1"></label>
+    <button onclick="downloadCSV()">Salvar CSV</button>
+    <button onclick="uploadToSupabase()">Enviar ao Supabase</button>
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.hostname}/ws`);
+    const angleCtx = document.getElementById('angleChart').getContext('2d');
+    const angleData = [];
+    const timestamps = [];
+
+    const angleChart = new Chart(angleCtx, {
+      type: 'line',
+      data: {
+        labels: timestamps,
+        datasets: [{
+          label: 'Ângulo',
+          data: angleData,
+          borderColor: 'cyan',
+          borderWidth: 1,
+          tension: 0.2,
+        }]
+      },
+      options: { scales: { x: { display: false }, y: { min: -90, max: 90 } } }
+    });
+
+    ws.onopen = () => document.getElementById("status").textContent = "Conectado com sucesso!";
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const ts = new Date().toLocaleTimeString();
+      timestamps.push(ts);
+      angleData.push(data.angle);
+      if (timestamps.length > 50) {
+        timestamps.shift();
+        angleData.shift();
+      }
+      angleChart.update();
+    };
+
+    const sliders = ['kp', 'ki', 'kd', 'setpoint'];
+    sliders.forEach(id => {
+      const slider = document.getElementById(id);
+      const valDisplay = document.getElementById(id + 'Val');
+      slider.addEventListener('input', () => {
+        valDisplay.textContent = slider.value;
+        const json = {};
+        json[id] = parseFloat(slider.value);
+        ws.send(JSON.stringify(json));
+      });
+    });
+
+    function downloadCSV() {
+      let csv = "timestamp,angle\n";
+      for (let i = 0; i < timestamps.length; i++) {
+        csv += `${timestamps[i]},${angleData[i]}\n`;
+      }
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'log_pid.csv';
+      link.click();
+    }
+
+    async function uploadToSupabase() {
+      const supabaseUrl = "https://dotmodxilkyohrnhjzab.supabase.co";
+      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvdG1vZHhpbGt5b2hybmhqemFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5MDMyODksImV4cCI6MjA2NjQ3OTI4OX0.9hll7rc4GlaHe2VGZJLs6jmXFUmV7Es2fGWbBA38154";
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const row = {
+          timestamp: timestamps[i],
+          angle: angleData[i]
+        };
+
+        await fetch(supabaseUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": supabaseKey,
+            "Authorization": `Bearer ${supabaseKey}`
+          },
+          body: JSON.stringify(row)
+        });
+      }
+      alert("Dados enviados para o Supabase!");
+    }
+  </script>
+</body>
+</html>

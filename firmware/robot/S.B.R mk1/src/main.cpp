@@ -1,18 +1,37 @@
 #include <Arduino.h>
+#include "motor_control.hpp"
+#include "pid_controller.hpp"
+#include "sensors.hpp"
+#include "system_state.hpp"
+#include "web_interface.hpp"
 
-// put function declarations here:
-int myFunction(int, int);
+MotorController motors;
+PIDController pid;
+SensorMPU sensor;
+SystemState systemState;
+WebSocketInterface webInterface;
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  Serial.begin(115200);
+  motors.begin();
+  sensor.begin();
+  pid.begin();
+  webInterface.begin();
+
+  pid.setTunings(10, 180, 1.0); //25.0, 180.0, 1.0
+  systemState.setPoint = pid.viewSetPoint();
+
+  Serial.println("Sistema iniciado.");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+  systemState.angle = sensor.getAngle();
+  systemState.pidOutput = pid.compute(systemState.angle);
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+motors.setSpeeds(systemState.pidOutput, systemState.pidOutput);
+  motors.generateStepPulses();
+
+  systemState.log();
+
+  delayMicroseconds(200);
 }
