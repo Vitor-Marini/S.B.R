@@ -2,13 +2,12 @@
 #include "motor_control.hpp"
 #include "pid_controller.hpp"
 #include "sensors.hpp"
-#include "system_state.hpp"
+#include "config_manager.hpp"
 #include "web_interface.hpp"
 
 MotorController motors;
 PIDController pid;
 SensorMPU sensor;
-SystemState systemState;
 WebSocketInterface webInterface;
 
 void setup() {
@@ -22,21 +21,21 @@ void setup() {
 
   webInterface.begin();
 
-  pid.setTunings(10, 180, 1.0);
+  pid.setTunings(config.kp, config.ki, config.kd, config.setpoint);/////////CONFERIR
 
-  systemState.setPoint = pid.viewSetPoint();
+
 
   Serial.println("Sistema iniciado.");
 }
 
 void loop() {
-  systemState.angle = sensor.getAngle();
-  systemState.pidOutput = pid.compute(systemState.angle);
+  config.pitchAngle= sensor.getAngle();
+  config.pidOutput = pid.compute(config.pitchAngle);
 
-  motors.setSpeeds(systemState.pidOutput, systemState.pidOutput);
+  motors.setSpeeds(config.pidOutput, config.pidOutput);
   motors.generateStepPulses();
 
-  systemState.log();
+  config.log();
 
   delayMicroseconds(200);
 }

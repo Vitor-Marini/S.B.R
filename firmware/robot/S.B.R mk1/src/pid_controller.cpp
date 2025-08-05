@@ -1,9 +1,18 @@
 #include <Arduino.h>
 #include "pid_controller.hpp"
 
+
 void PIDController::begin() {
   lastComputeTime = millis();
 }
+
+void PIDController::setTunings(double kp, double ki, double kd, double sp) {
+  Kp = kp;
+  Ki = ki;
+  Kd = kd;
+  setpoint = sp;
+}
+
 
 float PIDController::compute(float input) {
   unsigned long currentTime = millis();
@@ -13,13 +22,12 @@ float PIDController::compute(float input) {
 
   double error = setpoint - input;
 
-   // Zona morta (deadzone) de ±1.5 graus (ajuste conforme necessário)
+  //deadzone - avoid constant flicking
   if (abs(error) < 1.5) {
-    integral = 0; // opcional: evitar acúmulo indesejado
+    integral = 0; 
     previousError = 0;
     return 0;
   }
-
 
   integral += error * dt;
   if (integral > 3) integral = 3;
@@ -35,12 +43,5 @@ float PIDController::compute(float input) {
   return -output;
 }
 
-void PIDController::setTunings(double kp, double ki, double kd) {
-  Kp = kp;
-  Ki = ki;
-  Kd = kd;
-}
 
-double PIDController::viewSetPoint(){
-  return setpoint;
-}
+

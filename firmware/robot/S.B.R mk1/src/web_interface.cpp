@@ -2,9 +2,9 @@
 #include <WiFi.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
-#include "system_state.hpp"
+#include "config_manager.hpp"
 
-SystemState systemStateOUT;
+
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
@@ -13,10 +13,10 @@ void WebSocketInterface::handleWebSocketMessage(void *arg, uint8_t *data, size_t
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     DynamicJsonDocument doc(256);
     if (!deserializeJson(doc, data)) {
-      if (doc.containsKey("kp")) systemStateOUT.kp = doc["kp"];
-      if (doc.containsKey("ki")) systemStateOUT.ki = doc["ki"];
-      if (doc.containsKey("kd")) systemStateOUT.kd = doc["kd"];
-      if (doc.containsKey("setpoint")) systemStateOUT.setPoint = doc["setpoint"];
+      if (doc.containsKey("kp")) config.kp = doc["kp"];
+      if (doc.containsKey("ki")) config.ki = doc["ki"];
+      if (doc.containsKey("kd")) config.kd = doc["kd"];
+      if (doc.containsKey("setpoint")) config.setpoint = doc["setpoint"];
     }
   }
 }
