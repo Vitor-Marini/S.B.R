@@ -13,12 +13,17 @@ WebSocketInterface webInterface;
 
 void setup() {
   Serial.begin(115200);
+  
   motors.begin();
+  
   sensor.begin();
+
   pid.begin();
+
   webInterface.begin();
 
-  pid.setTunings(10, 180, 1.0); //25.0, 180.0, 1.0
+  pid.setTunings(10, 180, 1.0);
+
   systemState.setPoint = pid.viewSetPoint();
 
   Serial.println("Sistema iniciado.");
@@ -28,7 +33,7 @@ void loop() {
   systemState.angle = sensor.getAngle();
   systemState.pidOutput = pid.compute(systemState.angle);
 
-motors.setSpeeds(systemState.pidOutput, systemState.pidOutput);
+  motors.setSpeeds(systemState.pidOutput, systemState.pidOutput);
   motors.generateStepPulses();
 
   systemState.log();

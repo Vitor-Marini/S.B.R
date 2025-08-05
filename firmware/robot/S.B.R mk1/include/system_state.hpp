@@ -13,8 +13,6 @@ struct SystemState {
   float setPoint = 0;
 
   void log();
-
-  void updateDirectionFromPID();
 };
 
 #endif

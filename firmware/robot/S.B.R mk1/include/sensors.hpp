@@ -1,14 +1,16 @@
 #ifndef SENSORS_HPP
 #define SENSORS_HPP
 
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+
 class SensorMPU {
 public:
   void begin();
-  float getAngle();
+  float getAngle(); 
 
 private:
-  void calibrate();
-  float angleOffset = 0.0;
+  Adafruit_MPU6050 mpu;
 };
 
 #endif

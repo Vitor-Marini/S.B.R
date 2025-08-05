@@ -12,6 +12,15 @@ float PIDController::compute(float input) {
   lastComputeTime = currentTime;
 
   double error = setpoint - input;
+
+   // Zona morta (deadzone) de ±1.5 graus (ajuste conforme necessário)
+  if (abs(error) < 1.5) {
+    integral = 0; // opcional: evitar acúmulo indesejado
+    previousError = 0;
+    return 0;
+  }
+
+
   integral += error * dt;
   if (integral > 3) integral = 3;
   if (integral < -3) integral = -3;
@@ -23,7 +32,7 @@ float PIDController::compute(float input) {
   if (output > 255) output = 255;
   if (output < -255) output = -255;
 
-  return output;
+  return -output;
 }
 
 void PIDController::setTunings(double kp, double ki, double kd) {
