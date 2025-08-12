@@ -4,8 +4,14 @@
 ConfigManager config;
 
 void ConfigManager::log() {
-  Serial.println("|===================== CONFIG =====================|");
-  Serial.print("Time: ");Serial.println(millis());
+  // ANSI escape code para limpar tela
+  Serial.write(27); // ESC
+  Serial.print("[2J"); // Clear screen
+  Serial.write(27);
+  Serial.print("[H"); // Cursor para topo
+
+  Serial.println("\r|===================== CONFIG =====================|");
+  Serial.print  ("| Time        : "); Serial.println(millis());
   Serial.print  ("| SetPoint    : "); Serial.println(setpoint);
   Serial.print  ("| Pitch Angle : "); Serial.println(pitchAngle);
   Serial.print  ("| PID Output  : "); Serial.println(pidOutput);
@@ -13,5 +19,4 @@ void ConfigManager::log() {
   Serial.print  ("| KI          : "); Serial.println(ki);
   Serial.print  ("| KD          : "); Serial.println(kd);
   Serial.println("|==================================================|");
-  Serial.println(); 
 }

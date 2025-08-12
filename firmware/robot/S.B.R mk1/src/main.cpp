@@ -6,9 +6,10 @@
 #include "web_interface.hpp"
 
 MotorController motors;
-PIDController pid;
 SensorMPU sensor;
 WebSocketInterface webInterface;
+
+unsigned long lastLogTime = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -24,7 +25,7 @@ void setup() {
   pid.setTunings(config.kp, config.ki, config.kd, config.setpoint);/////////CONFERIR
 
 
-
+  
   Serial.println("Sistema iniciado.");
 }
 
@@ -35,7 +36,11 @@ void loop() {
   motors.setSpeeds(config.pidOutput, config.pidOutput);
   motors.generateStepPulses();
 
-  config.log();
+  
+  if (millis() - lastLogTime > 200) {
+    config.log();
+    lastLogTime = millis();
+  }
 
   delayMicroseconds(200);
 }

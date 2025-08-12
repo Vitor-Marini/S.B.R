@@ -25,7 +25,7 @@ void MotorController::setSpeeds(double leftSpeed, double rightSpeed) {
   rightSpeed = abs(rightSpeed);
 
   // Limites e mapeamento para frequência de passos
-  const double MaxSpeed = 255.0;
+  const double MaxSpeed = 100.0;
   const double MaxStepsPerSecond = 6000.0;
 
   if (leftSpeed > MaxSpeed) leftSpeed = MaxSpeed;

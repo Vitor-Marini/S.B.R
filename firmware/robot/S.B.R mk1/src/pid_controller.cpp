@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "pid_controller.hpp"
 
+PIDController pid;
 
 void PIDController::begin() {
   lastComputeTime = millis();
@@ -22,25 +23,26 @@ float PIDController::compute(float input) {
 
   double error = setpoint - input;
 
-  //deadzone - avoid constant flicking
-  if (abs(error) < 1.5) {
-    integral = 0; 
+  // Deadzone
+  if (abs(error) < 1.5) {////////////essa deadzone na web
+    integral = 0;
     previousError = 0;
     return 0;
   }
 
   integral += error * dt;
-  if (integral > 3) integral = 3;
-  if (integral < -3) integral = -3;
+  integral = constrain(integral, -50, 50);
 
   double derivative = (error - previousError) / dt;
-  double output = Kp * error + Ki * integral + Kd * derivative;
   previousError = error;
 
-  if (output > 255) output = 255;
-  if (output < -255) output = -255;
+  // Cálculo PID
+  double output = Kp * error + Ki * integral + Kd * derivative;
 
-  return -output;
+  // Converte saída para porcentagem (-100 a 100)
+  output = constrain(output, -100.0, 100.0);
+
+  return -output;  // Retorna % da potência
 }
 
 

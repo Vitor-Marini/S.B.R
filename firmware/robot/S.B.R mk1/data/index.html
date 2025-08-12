@@ -21,9 +21,9 @@
   <canvas id="angleChart" width="600" height="300"></canvas>
 
   <div class="slider-container">
-    <label>Kp: <span id="kpVal">0</span><input type="range" id="kp" min="0" max="50" step="0.1"></label>
-    <label>Ki: <span id="kiVal">0</span><input type="range" id="ki" min="0" max="10" step="0.1"></label>
-    <label>Kd: <span id="kdVal">0</span><input type="range" id="kd" min="0" max="20" step="0.1"></label>
+    <label>Kp: <span id="kpVal">0</span><input type="range" id="kp" min="0" max="200" step="0.1"></label>
+    <label>Ki: <span id="kiVal">0</span><input type="range" id="ki" min="0" max="200" step="0.1"></label>
+    <label>Kd: <span id="kdVal">0</span><input type="range" id="kd" min="0" max="200" step="0.1"></label>
     <label>Setpoint: <span id="spVal">0</span><input type="range" id="setpoint" min="-45" max="45" step="1"></label>
     <button onclick="downloadCSV()">Salvar CSV</button>
     <button onclick="uploadToSupabase()">Enviar ao Supabase</button>
@@ -51,16 +51,37 @@
     });
 
     ws.onopen = () => document.getElementById("status").textContent = "Conectado com sucesso!";
+
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      const ts = new Date().toLocaleTimeString();
-      timestamps.push(ts);
-      angleData.push(data.angle);
-      if (timestamps.length > 50) {
-        timestamps.shift();
-        angleData.shift();
+
+      if ("angle" in data) {
+        const ts = new Date().toLocaleTimeString();
+        timestamps.push(ts);
+        angleData.push(data.angle);
+        if (timestamps.length > 50) {
+          timestamps.shift();
+          angleData.shift();
+        }
+        angleChart.update();
       }
-      angleChart.update();
+
+      if ("kp" in data) {
+        document.getElementById('kp').value = data.kp;
+        document.getElementById('kpVal').textContent = data.kp;
+      }
+      if ("ki" in data) {
+        document.getElementById('ki').value = data.ki;
+        document.getElementById('kiVal').textContent = data.ki;
+      }
+      if ("kd" in data) {
+        document.getElementById('kd').value = data.kd;
+        document.getElementById('kdVal').textContent = data.kd;
+      }
+      if ("setpoint" in data) {
+        document.getElementById('setpoint').value = data.setpoint;
+        document.getElementById('spVal').textContent = data.setpoint;
+      }
     };
 
     const sliders = ['kp', 'ki', 'kd', 'setpoint'];
@@ -88,7 +109,7 @@
     }
 
     async function uploadToSupabase() {
-      const supabaseUrl = "https://dotmodxilkyohrnhjzab.supabase.co";
+      const supabaseUrl = "https://dotmodxilkyohrnhjzab.supabase.co/rest/v1/angles"; // você pode alterar o endpoint aqui
       const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvdG1vZHhpbGt5b2hybmhqemFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5MDMyODksImV4cCI6MjA2NjQ3OTI4OX0.9hll7rc4GlaHe2VGZJLs6jmXFUmV7Es2fGWbBA38154";
 
       for (let i = 0; i < timestamps.length; i++) {

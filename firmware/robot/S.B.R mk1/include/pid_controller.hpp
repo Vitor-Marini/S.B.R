@@ -19,4 +19,5 @@ private:
   unsigned long lastComputeTime = 0;
 };
 
+extern PIDController pid;
 #endif
