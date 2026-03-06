@@ -11,6 +11,8 @@ public:
 
 private:
   Adafruit_MPU6050 mpu;
+  uint32_t lastTimestamp = 0;
+  float filteredAngle = 0.0;
 };
 
 #endif

@@ -16,22 +16,20 @@ void PIDController::setTunings(double kp, double ki, double kd, double sp) {
 
 
 float PIDController::compute(float input) {
-  unsigned long currentTime = millis();
-  double dt = (currentTime - lastComputeTime) / 1000.0;
-  if (dt <= 0.0) dt = 0.001;
-  lastComputeTime = currentTime;
+  // Usamos um DT fixo de 10ms (100Hz) definido no main.cpp
+  const double dt = 0.01; 
 
   double error = setpoint - input;
 
-  // Deadzone
-  if (abs(error) < 1.5) {////////////essa deadzone na web
-    integral = 0;
-    previousError = 0;
-    return 0;
+  // Deadzone para evitar micro-oscilações no repouso
+  if (abs(error) < 0.5) {
+    // Não zeramos tudo, apenas a saída se o erro for desprezível
+    // integral = 0; // Opcional: manter ou zerar
   }
 
+  // Integral com Anti-Windup (limitamos a acumulação)
   integral += error * dt;
-  integral = constrain(integral, -50, 50);
+  integral = constrain(integral, -20.0, 20.0); // Limite menor para evitar overshoot
 
   double derivative = (error - previousError) / dt;
   previousError = error;
@@ -42,7 +40,7 @@ float PIDController::compute(float input) {
   // Converte saída para porcentagem (-100 a 100)
   output = constrain(output, -100.0, 100.0);
 
-  return -output;  // Retorna % da potência
+  return -output; 
 }
 
 

@@ -14,19 +14,24 @@ void SensorMPU::begin() {
 
 float SensorMPU::getAngle() {
   const float angleOffset = 3.64; 
-  const float DEADZONE_THRESHOLD = 0.5; 
+  const float ALPHA = 0.98; // Peso do giroscópio (estabilidade curto prazo)
 
   sensors_event_t acc, gyro, temp;
   mpu.getEvent(&acc, &gyro, &temp);
 
-  float pitch = atan2(acc.acceleration.x, acc.acceleration.z) * 180.0 / PI;
-  float adjustedPitch = pitch - angleOffset;
+  uint32_t now = millis();
+  float dt = (now - lastTimestamp) / 1000.0;
+  lastTimestamp = now;
+  if (dt > 0.1 || dt <= 0) dt = 0.01; // Proteção contra saltos no tempo
 
+  // Ângulo pelo acelerômetro
+  float accAngle = atan2(acc.acceleration.x, acc.acceleration.z) * 180.0 / PI;
+  float adjustedAccAngle = accAngle - angleOffset;
 
-  if (abs(adjustedPitch) < DEADZONE_THRESHOLD) {
-    return 0.0;
-  }
+  // Filtro Complementar: Ângulo = ALPHA * (Ângulo + Giro * dt) + (1 - ALPHA) * AccAngle
+  // Nota: gyro.gyro.y é o eixo de inclinação (pitch) dependendo da orientação do sensor
+  filteredAngle = ALPHA * (filteredAngle + (gyro.gyro.y * 180.0 / PI) * dt) + (1.0 - ALPHA) * adjustedAccAngle;
 
-  return adjustedPitch;
+  return filteredAngle;
 }
 

@@ -19,6 +19,8 @@ class ConfigManager{
     float pitchAngle = 0;
 
     void log();
+    bool load();
+    bool save();
 };
 
 extern ConfigManager config;

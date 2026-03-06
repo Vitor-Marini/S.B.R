@@ -1,6 +1,21 @@
 #include <Arduino.h>
 #include "motor_control.hpp"
 
+hw_timer_t *MotorController::timerL = NULL;
+hw_timer_t *MotorController::timerR = NULL;
+
+void IRAM_ATTR MotorController::onTimerL() {
+  digitalWrite(stepPin1, HIGH);
+  delayMicroseconds(2);
+  digitalWrite(stepPin1, LOW);
+}
+
+void IRAM_ATTR MotorController::onTimerR() {
+  digitalWrite(stepPin2, HIGH);
+  delayMicroseconds(2);
+  digitalWrite(stepPin2, LOW);
+}
+
 void MotorController::begin() {
   pinMode(dirPin1, OUTPUT);
   pinMode(stepPin1, OUTPUT);
@@ -9,6 +24,17 @@ void MotorController::begin() {
 
   digitalWrite(dirPin1, motorDirL);
   digitalWrite(dirPin2, motorDirR);
+
+  // Inicializa Timers (ESP32-C3 tem 2 timers de hardware no grupo 0)
+  timerL = timerBegin(0, 80, true); // 1MHz base (80MHz / 80)
+  timerAttachInterrupt(timerL, &onTimerL, true);
+  timerAlarmWrite(timerL, 1000000, true); // Inicialmente desativado (1s)
+  timerAlarmEnable(timerL);
+
+  timerR = timerBegin(1, 80, true);
+  timerAttachInterrupt(timerR, &onTimerR, true);
+  timerAlarmWrite(timerR, 1000000, true);
+  timerAlarmEnable(timerR);
 }
 
 void MotorController::setSpeeds(double leftSpeed, double rightSpeed) {
@@ -20,11 +46,9 @@ void MotorController::setSpeeds(double leftSpeed, double rightSpeed) {
   motorDirR = (rightSpeed >= 0) ? HIGH : LOW;
   digitalWrite(dirPin2, motorDirR);
 
-  // Converte valores negativos em positivos
   leftSpeed = abs(leftSpeed);
   rightSpeed = abs(rightSpeed);
 
-  // Limites e mapeamento para frequência de passos
   const double MaxSpeed = 100.0;
   const double MaxStepsPerSecond = 6000.0;
 
@@ -34,29 +58,22 @@ void MotorController::setSpeeds(double leftSpeed, double rightSpeed) {
   double stepsL = mapDouble(leftSpeed, 0.0, MaxSpeed, 0.0, MaxStepsPerSecond);
   double stepsR = mapDouble(rightSpeed, 0.0, MaxSpeed, 0.0, MaxStepsPerSecond);
 
-  if (stepsL < 1) stepsL = 1;
-  if (stepsR < 1) stepsR = 1;
+  // Se velocidade for muito baixa, para o timer (alarm desativado ou tempo gigante)
+  if (stepsL < 10) {
+    timerAlarmWrite(timerL, 2000000, true); // 2 segundos
+  } else {
+    timerAlarmWrite(timerL, 1000000 / stepsL, true);
+  }
 
-  stepDelayUsL = 1e6 / stepsL;
-  stepDelayUsR = 1e6 / stepsR;
+  if (stepsR < 10) {
+    timerAlarmWrite(timerR, 2000000, true);
+  } else {
+    timerAlarmWrite(timerR, 1000000 / stepsR, true);
+  }
 }
 
 void MotorController::generateStepPulses() {
-  unsigned long now = micros();
-
-  if (now - lastStepTimeL >= stepDelayUsL) {
-    lastStepTimeL = now;
-    digitalWrite(stepPin1, HIGH);
-    delayMicroseconds(2);
-    digitalWrite(stepPin1, LOW);
-  }
-
-  if (now - lastStepTimeR >= stepDelayUsR) {
-    lastStepTimeR = now;
-    digitalWrite(stepPin2, HIGH);
-    delayMicroseconds(2);
-    digitalWrite(stepPin2, LOW);
-  }
+  // Vazio pois agora é via interrupção
 }
 
 double MotorController::mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
