@@ -4,10 +4,7 @@
 class MotorController {
 public:
   void begin();
-  void setSpeeds(double leftSpeed, double rightSpeed);
-  // generateStepPulses não será mais necessária no loop principal se usarmos timers, 
-  // mas vamos mantê-la para retrocompatibilidade ou migrá-la para o Timer.
-  void generateStepPulses(); 
+  void setSpeeds(float leftTarget, float rightTarget);
 
   static void IRAM_ATTR onTimerL();
   static void IRAM_ATTR onTimerR();
@@ -21,14 +18,22 @@ private:
   static hw_timer_t *timerL;
   static hw_timer_t *timerR;
 
-  unsigned long lastStepTimeL = 0;
-  unsigned long lastStepTimeR = 0;
-  double stepDelayUsL = 1000;
-  double stepDelayUsR = 1000;
+  static volatile bool stepPhaseL;
+  static volatile bool stepPhaseR;
+
+  // Rampa de aceleração — rastreia velocidade atual para suavizar transições
+  float currentSpeedL = 0.0f;
+  float currentSpeedR = 0.0f;
+
+  // Máxima mudança de velocidade (%) por chamada do setSpeeds (~10ms).
+  // 8% por tick → 0→100% em ~125ms, -100→+100 em ~250ms.
+  // Suficientemente rápido para equilíbrio, suave o bastante para não perder passo.
+  static constexpr float MAX_ACCEL_PER_TICK = 8.0f;
+
   int motorDirL = HIGH;
   int motorDirR = HIGH;
 
-  double mapDouble(double x, double in_min, double in_max, double out_min, double out_max);
+  float mapFloat(float x, float in_min, float in_max, float out_min, float out_max);
 };
 
 #endif

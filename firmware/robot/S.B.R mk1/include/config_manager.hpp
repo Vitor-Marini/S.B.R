@@ -8,15 +8,15 @@ class ConfigManager{
   public:
 
     //View and modifie
-    double setpoint = 0;
-    double kp = 10;
-    double ki = 20;
-    double kd = 1.0;
+    float setpoint = 0.0f;
+    float kp = 25.0f;
+    float ki = 0.0f;
+    float kd = 0.8f;
 
 
     //Only View
-    double pidOutput = 0;
-    float pitchAngle = 0;
+    float pidOutput = 0.0f;
+    float pitchAngle = 0.0f;
 
     void log();
     bool load();

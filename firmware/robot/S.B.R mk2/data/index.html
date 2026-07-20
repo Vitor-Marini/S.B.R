@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>S.B.R mk2 Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#111;color:#eee;padding:16px;max-width:800px;margin:0 auto}
+h2{text-align:center;margin-bottom:16px;color:#0af}
+#status{padding:8px 12px;border-radius:6px;margin-bottom:12px;font-weight:bold;text-align:center}
+.state-init{background:#333;color:#888}
+.state-calibrate{background:#a07400;color:#fff}
+.state-idle{background:#444;color:#aaa}
+.state-starting{background:#ff8c00;color:#000}
+.state-active{background:#00aa44;color:#fff}
+.state-moving{background:#0066ff;color:#fff}
+.state-fault{background:#cc0033;color:#fff}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.card{background:#1a1a2e;border-radius:8px;padding:12px;flex:1;min-width:140px}
+.card label{color:#888;font-size:12px;display:block}
+.card .val{font-size:22px;font-weight:bold;color:#0af}
+canvas{background:#1a1a2e;border-radius:8px;width:100%!important;height:200px!important}
+.controls{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.controls button{padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;flex:1}
+.btn-start{background:#00aa44;color:#fff}
+.btn-stop{background:#cc0033;color:#fff}
+.btn-cal{background:#ff8c00;color:#000}
+.slider-group{margin:8px 0}
+.slider-group label{display:flex;justify-content:space-between;font-size:14px;margin-bottom:2px}
+input[type=range]{width:100%;height:6px;-webkit-appearance:none;background:#333;border-radius:3px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#0af;cursor:pointer}
+.btn-csv{margin-top:8px;padding:8px 16px;background:#0af;color:#000;border:none;border-radius:6px;cursor:pointer;width:100%}
+@media(max-width:500px){.card{min-width:100px}.card .val{font-size:18px}}
+</style>
+</head>
+<body>
+
+<h2>S.B.R mk2</h2>
+<div id="status" class="state-init">Conectando...</div>
+
+<div class="row">
+  <div class="card"><label>Pitch</label><div class="val" id="valAngle">0.0</div></div>
+  <div class="card"><label>Rate</label><div class="val" id="valRate">0.0</div></div>
+  <div class="card"><label>Yaw</label><div class="val" id="valYaw">0.0</div></div>
+  <div class="card"><label>Output</label><div class="val" id="valOutput">0</div></div>
+  <div class="card"><label>Motors (L/R)</label><div class="val" id="valMotors">0 / 0</div></div>
+</div>
+
+<canvas id="angleChart"></canvas>
+
+<div class="controls">
+  <button class="btn-start" onclick="sendCmd({start:1})">INICIAR</button>
+  <button class="btn-stop" onclick="sendCmd({stop:1})">PARAR</button>
+  <button class="btn-cal" onclick="sendCmd({calibrate:1})">CALIBRAR</button>
+</div>
+
+<div class="slider-group">
+  <label>Kp <span id="kpVal">25.0</span></label>
+  <input type="range" id="kp" min="0" max="200" step="0.5" value="25">
+</div>
+<div class="slider-group">
+  <label>Ki <span id="kiVal">0.50</span></label>
+  <input type="range" id="ki" min="0" max="10" step="0.05" value="0.5">
+</div>
+<div class="slider-group">
+  <label>Kd <span id="kdVal">0.80</span></label>
+  <input type="range" id="kd" min="0" max="5" step="0.05" value="0.8">
+</div>
+<div class="slider-group">
+  <label>Setpoint <span id="spVal">0.0</span></label>
+  <input type="range" id="setpoint" min="-10" max="10" step="0.5" value="0">
+</div>
+
+<button class="btn-csv" onclick="downloadCSV()">Exportar CSV</button>
+
+<script>
+const ws = new WebSocket(`ws://${location.hostname}/ws`);
+const statusEl = document.getElementById('status');
+
+const ctx = document.getElementById('angleChart').getContext('2d');
+const angleData=[], timeData=[];
+const chart = new Chart(ctx, {
+  type:'line',
+  data:{
+    labels:timeData,
+    datasets:[
+      {label:'Pitch',data:angleData,borderColor:'#0af',borderWidth:2,tension:0.3,pointRadius:0},
+    ]
+  },
+  options:{
+    animation:false,
+    responsive:true,
+    maintainAspectRatio:false,
+    scales:{
+      x:{display:false},
+      y:{min:-45,max:45,grid:{color:'#333'}}
+    },
+    plugins:{legend:{labels:{color:'#eee'}}}
+  }
+});
+
+ws.onopen=()=>{
+  statusEl.textContent='Conectado';
+  statusEl.className='state-active';
+};
+
+ws.onclose=()=>{
+  statusEl.textContent='Desconectado';
+  statusEl.className='state-fault';
+};
+
+ws.onmessage=(ev)=>{
+  const d=JSON.parse(ev.data);
+
+  if('angle' in d){
+    const ts=new Date().toLocaleTimeString();
+    timeData.push(ts);
+    angleData.push(d.angle);
+    if(timeData.length>100){timeData.shift();angleData.shift()}
+    chart.update();
+
+    document.getElementById('valAngle').textContent=d.angle.toFixed(1);
+    document.getElementById('valRate').textContent=(d.rate||0).toFixed(2);
+    document.getElementById('valYaw').textContent=(d.yaw||0).toFixed(1);
+    document.getElementById('valOutput').textContent=(d.output||0).toFixed(0);
+    document.getElementById('valMotors').textContent=`${(d.lspd||0).toFixed(0)} / ${(d.rspd||0).toFixed(0)}`;
+  }
+
+  if('state' in d){
+    statusEl.textContent='Estado: '+d.state;
+    statusEl.className='state-'+d.state.toLowerCase();
+  }
+
+  if('kp' in d){
+    document.getElementById('kp').value=d.kp;
+    document.getElementById('kpVal').textContent=d.kp;
+  }
+  if('ki' in d){
+    document.getElementById('ki').value=d.ki;
+    document.getElementById('kiVal').textContent=d.ki.toFixed(2);
+  }
+  if('kd' in d){
+    document.getElementById('kd').value=d.kd;
+    document.getElementById('kdVal').textContent=d.kd.toFixed(2);
+  }
+  if('setpoint' in d){
+    document.getElementById('setpoint').value=d.setpoint;
+    document.getElementById('spVal').textContent=d.setpoint.toFixed(1);
+  }
+};
+
+['kp','ki','kd','setpoint'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('input',()=>{
+    const val=parseFloat(el.value);
+    document.getElementById(id+'Val').textContent=val.toFixed(2);
+    const o={};o[id]=val;
+    ws.send(JSON.stringify(o));
+  });
+});
+
+function sendCmd(o){ws.send(JSON.stringify(o))}
+
+function downloadCSV(){
+  let csv='timestamp,angle\n';
+  for(let i=0;i<timeData.length;i++)csv+=`${timeData[i]},${angleData[i]}\n`;
+  const b=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download='sbr_log.csv';
+  a.click();
+}
+</script>
+</body>
+</html>

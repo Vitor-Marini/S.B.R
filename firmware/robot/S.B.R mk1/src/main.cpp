@@ -17,20 +17,16 @@ void setup() {
   motors.begin();
   
   sensor.begin();
+  sensor.calibrate(); // Calibra gyro offset com o robô parado
 
   pid.begin();
 
   webInterface.begin();
   
-  // Carrega configurações persistentes
-  if (config.load()) {
-    pid.setTunings(config.kp, config.ki, config.kd, config.setpoint);
-  } else {
-    pid.setTunings(config.kp, config.ki, config.kd, config.setpoint);
-  }
+  // Carrega configurações persistentes (ou usa defaults do header)
+  config.load();
+  pid.setTunings(config.kp, config.ki, config.kd, config.setpoint);
 
-
-  
   Serial.println("Sistema iniciado.");
 }
 
@@ -47,23 +43,19 @@ void loop() {
     config.pitchAngle = sensor.getAngle();
     
     // Failsafe: Se o robô inclinar mais de 45 graus, desliga os motores
-    if (abs(config.pitchAngle) > 45.0) {
+    if (abs(config.pitchAngle) > 45.0f) {
       motors.setSpeeds(0, 0);
       config.pidOutput = 0;
     } else {
       config.pidOutput = pid.compute(config.pitchAngle);
       motors.setSpeeds(config.pidOutput, config.pidOutput);
     }
-
-    // Opcional: Enviar ângulo via WebSocket em taxa menor
-    // webInterface.broadcastAngle(config.pitchAngle);
   }
 
-  // O log pode rodar fora do loop crítico de 100Hz
+  // Envia telemetria via WebSocket a 5Hz (independente do loop PID de 100Hz)
   if (millis() - lastLogTime > 200) {
     config.log();
+    webInterface.broadcastAngle(config.pitchAngle);
     lastLogTime = millis();
   }
-
-  // generateStepPulses não é mais necessária aqui (está no Timer)
 }

@@ -6,16 +6,17 @@ class PIDController {
 public:
   void begin();
   float compute(float input);
-  void setTunings(double kp, double ki, double kd, double sp);
+  void setTunings(float kp, float ki, float kd, float sp);
 
 private:
-  double setpoint = 0.0;
-  double Kp = 0.0;
-  double Ki = 0.0;
-  double Kd = 0.0;
+  float setpoint = 0.0f;
+  float Kp = 0.0f;
+  float Ki = 0.0f;
+  float Kd = 0.0f;
   
-  double previousError = 0.0;
-  double integral = 0.0;
+  float previousError = 0.0f;
+  float integral = 0.0f;
+  float filteredDerivative = 0.0f;
   unsigned long lastComputeTime = 0;
 };
 
