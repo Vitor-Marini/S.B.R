@@ -10,8 +10,8 @@ public:
     void notifyStateChange();
 
 private:
-    AsyncWebServer _server = AsyncWebServer(80);
-    AsyncWebSocket _ws = AsyncWebSocket("/ws");
+    AsyncWebServer _server{80};
+    AsyncWebSocket _ws{"/ws"};
 
     uint32_t _lastBroadcast = 0;
 

@@ -3,8 +3,13 @@
 #include "imu_manager.hpp"
 #include "balance.hpp"
 #include "motor.hpp"
+#include "velocity.hpp"
+#include "ble_gamepad.hpp"
 
 Supervisor supervisor;
+
+void requestBalanceStart() { supervisor.requestStart(); }
+void requestBalanceStop() { supervisor.requestStop(); }
 
 void Supervisor::begin() {
     _setState(STATE_INIT);
@@ -50,13 +55,21 @@ void Supervisor::_onEnterState() {
     switch (_state) {
         case STATE_ACTIVE:
         case STATE_MOVING:
+            balance.resetIntegral();  // começa com roda parada
+            velCtrl.reset();
+            break;
+        case STATE_STARTING:
+            motors.stop();
+            Serial.println("Segure o robô em pé no ponto de equilíbrio...");
             break;
         case STATE_FAULT:
             motors.stop();
+            balance.resetIntegral();
             break;
         case STATE_IDLE:
             motors.stop();
             balance.resetIntegral();
+            velCtrl.reset();
             break;
         default:
             break;
@@ -73,34 +86,37 @@ void Supervisor::_runInit() {
 }
 
 void Supervisor::_runCalibrate() {
+    motors.stop();  // calibrar com motor vibrando estraga o offset
     imu.calibrateGyro(500);
     _setState(STATE_IDLE);
 }
 
 void Supervisor::_runIdle() {
+    motors.update();  // rampa do comando 'motor' do CLI
     imu.read();
     cfg.pitchAngle = imu.getPitch();
 }
 
+// Motores parados até o robô ficar perto do setpoint por 300 ms; aí liga o equilíbrio.
 void Supervisor::_runStarting() {
-    float elapsed = (millis() - _stateStartMs) / 1000.0f;
-    float progress = constrain(elapsed / 2.0f, 0.0f, 1.0f);
-
     imu.read();
+    cfg.pitchAngle = imu.getPitch();
 
-    if (progress >= 1.0f) {
-        _setState(STATE_ACTIVE);
-        Serial.println("Rampa de inicialização concluída.");
-        return;
+    if (fabsf(imu.getPitch() - cfg.setpoint) < 3.0f) {
+        if (_nearSince == 0) _nearSince = millis();
+        else if (millis() - _nearSince > 300) {
+            _nearSince = 0;
+            _setState(STATE_ACTIVE);
+        }
+    } else {
+        _nearSince = 0;
     }
 
-    float kp = cfg.anglePid.kp * progress;
-    float kd = cfg.anglePid.kd * progress;
-    float error = cfg.setpoint - imu.getPitch();
-    float torque = -(kp * error + kd * (-imu.getPitchRate()));
-    torque = constrain(torque, -100.0f, 100.0f);
-    float steps = torque / 100.0f * cfg.motor.stepsPerRev * 3.0f;
-    motors.setSpeeds(steps, steps);
+    if (millis() - _stateStartMs > 10000) {
+        Serial.println("Não ficou em pé em 10 s. Voltando para IDLE.");
+        _nearSince = 0;
+        _setState(STATE_IDLE);
+    }
 }
 
 void Supervisor::_runActive() {
@@ -109,10 +125,14 @@ void Supervisor::_runActive() {
     float angle = imu.getPitch();
     if (fabsf(angle) > cfg.failsafeAngle) {
         Serial.printf("FALHA: Ângulo %.1f° excede limite %.1f°\n", angle, cfg.failsafeAngle);
+        velCtrl.reset();
         _setState(STATE_FAULT);
         return;
     }
 
+    // Fase 4: malha de velocidade → offset de ângulo. Curva (Fase 5) ainda desligada.
+    velCtrl.update();
+    balance.setAngleOffset(velCtrl.getAngleOffset());
     balance.compute();
 }
 
@@ -122,6 +142,7 @@ void Supervisor::_runMoving() {
 
 void Supervisor::_runFault() {
     motors.stop();
+    imu.read();  // sem isso o ângulo congela e o FAULT nunca sai
 
     float angle = imu.getPitch();
     if (fabsf(angle) < 15.0f) {

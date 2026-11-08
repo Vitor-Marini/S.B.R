@@ -5,143 +5,118 @@
 
 MotorManager motors;
 
+// 12 bits a 80 MHz (APB): ~19.1 Hz até ~19.5 kHz. Fora disso ledc_set_freq falha.
+static const ledc_timer_bit_t LEDC_RES = LEDC_TIMER_12_BIT;
+static const uint32_t DUTY_50 = 2048;
+static const int FREQ_MIN = 20;
+static const int FREQ_MAX = 19000;
+static const int PARK_FREQ = 2000;
+
+void MotorManager::_setupChannel(Channel& c) {
+    pinMode(c.pinDir, OUTPUT);
+    digitalWrite(c.pinDir, LOW);
+    c.dir = LOW;
+
+    ledc_timer_config_t t = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_RES,
+        .timer_num = (ledc_timer_t)c.timer,
+        .freq_hz = 1000,
+        .clk_cfg = LEDC_USE_APB_CLK
+    };
+    ledc_timer_config(&t);
+
+    // duty 0: sem pulsos até alguém pedir velocidade
+    ledc_channel_config_t ch = {
+        .gpio_num = c.pinStep,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = (ledc_channel_t)c.channel,
+        .timer_sel = (ledc_timer_t)c.timer,
+        .duty = 0,
+        .hpoint = 0
+    };
+    ledc_channel_config(&ch);
+    c.freq = 0;
+}
+
 void MotorManager::begin() {
-    pinMode(PIN_DIR_L, OUTPUT);
-    pinMode(PIN_DIR_R, OUTPUT);
-    digitalWrite(PIN_DIR_L, LOW);
-    digitalWrite(PIN_DIR_R, LOW);
-
-    ledc_timer_config_t tL = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_10_BIT,
-        .timer_num = (ledc_timer_t)LEDC_TIM_L,
-        .freq_hz = 1000,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&tL);
-
-    ledc_timer_config_t tR = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_10_BIT,
-        .timer_num = (ledc_timer_t)LEDC_TIM_R,
-        .freq_hz = 1000,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&tR);
-
-    ledc_channel_config_t chL = {
-        .gpio_num = PIN_STEP_L,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = (ledc_channel_t)LEDC_CH_L,
-        .timer_sel = (ledc_timer_t)LEDC_TIM_L,
-        .duty = 512,
-        .hpoint = 0
-    };
-    ledc_channel_config(&chL);
-
-    ledc_channel_config_t chR = {
-        .gpio_num = PIN_STEP_R,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = (ledc_channel_t)LEDC_CH_R,
-        .timer_sel = (ledc_timer_t)LEDC_TIM_R,
-        .duty = 512,
-        .hpoint = 0
-    };
-    ledc_channel_config(&chR);
-
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)LEDC_TIM_L, 1);
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)LEDC_TIM_R, 1);
-
-    _lastUpdate = millis();
-
-    Serial.println("Motores inicializados (LEDC PWM).");
+    _setupChannel(_l);
+    _setupChannel(_r);
+    _lastUpdateUs = micros();
+    Serial.println("Motores inicializados (LEDC 12-bit).");
 }
 
-void MotorManager::_setChannelFreq(int timer, int channel, int pin, float stepsPerSec) {
-    int freq = (int)(stepsPerSec + 0.5f);
-    if (freq < 1) freq = 1;
-    if (freq > 50000) freq = 50000;
+// Escreve DIR/freq/duty no hardware, só quando mudam.
+void MotorManager::_apply(Channel& c) {
+    int dir = (c.current >= 0.0f) != c.reversed ? HIGH : LOW;
+    int freq = (int)(fabsf(c.current) + 0.5f);
+    if (freq < FREQ_MIN) freq = 0;
+    if (freq > FREQ_MAX) freq = FREQ_MAX;
 
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)timer, freq);
-}
+    if (freq == 0) {
+        if (c.freq != 0) {
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)c.channel, 0);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)c.channel);
+            // nova freq/duty só valem no fim do período atual: estaciona o timer rápido
+            // (duty 0, sem pulsos) para o religamento na inversão não esperar um período lento
+            ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)c.timer, PARK_FREQ);
+            c.freq = 0;
+        }
+        return;
+    }
 
-void MotorManager::_stopChannel(int channel, int pin) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel);
-}
-
-void MotorManager::_rampMotor(float target, float& current, float maxDelta) {
-    float delta = target - current;
-    if (fabsf(delta) <= maxDelta) {
-        current = target;
-    } else {
-        current += (delta > 0.0f) ? maxDelta : -maxDelta;
+    // DIR só muda com |v| abaixo do piso (rampa com sinal passa por zero), então sem pulsos no meio
+    if (dir != c.dir) {
+        digitalWrite(c.pinDir, dir);
+        c.dir = dir;
+    }
+    if (freq != c.freq) {
+        if (ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)c.timer, freq) != ESP_OK) return;
+        if (c.freq == 0) {
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)c.channel, DUTY_50);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)c.channel);
+        }
+        c.freq = freq;
     }
 }
 
 void MotorManager::setSpeeds(float left, float right) {
-    uint32_t now = millis();
-    float dt = (now - _lastUpdate) / 1000.0f;
-    if (dt > 0.1f || dt <= 0.0f) dt = 0.01f;
-    _lastUpdate = now;
+    _l.target = left;
+    _r.target = right;
+    update();
+}
 
-    int dirL = (left >= 0) ? HIGH : LOW;
-    int dirR = (right >= 0) ? HIGH : LOW;
+void MotorManager::update() {
+    uint32_t now = micros();
+    float dt = (now - _lastUpdateUs) * 1e-6f;
+    _lastUpdateUs = now;
+    if (dt > 0.02f) dt = 0.02f;  // pausa longa: limita o passo de rampa
 
-    if (cfg.motor.leftReversed) dirL = (dirL == HIGH) ? LOW : HIGH;
-    if (cfg.motor.rightReversed) dirR = (dirR == HIGH) ? LOW : HIGH;
-
-    digitalWrite(PIN_DIR_L, dirL);
-    digitalWrite(PIN_DIR_R, dirR);
-
-    float absL = fabsf(left);
-    float absR = fabsf(right);
+    _l.reversed = cfg.motor.leftReversed;
+    _r.reversed = cfg.motor.rightReversed;
 
     float maxDelta = cfg.motor.maxAccelStepsS2 * dt;
-
-    float targetL = absL;
-    float targetR = absR;
-
-    if (left == 0.0f && right == 0.0f) {
-        _currentL = 0.0f;
-        _currentR = 0.0f;
-    } else {
-        _rampMotor(targetL, _currentL, maxDelta);
-        _rampMotor(targetR, _currentR, maxDelta);
+    for (Channel* c : {&_l, &_r}) {
+        float delta = c->target - c->current;
+        c->current += constrain(delta, -maxDelta, maxDelta);
+        _apply(*c);
     }
 
-    if (_currentL < 10.0f) {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L, 0);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L);
-    } else {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L, 512);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L);
-        _setChannelFreq(LEDC_TIM_L, LEDC_CH_L, PIN_STEP_L, _currentL);
-    }
+    // odometria = velocidade aplicada de fato (0 abaixo do piso)
+    _leftSteps  += copysignf(_l.freq, _l.current) * dt;
+    _rightSteps += copysignf(_r.freq, _r.current) * dt;
 
-    if (_currentR < 10.0f) {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R, 0);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R);
-    } else {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R, 512);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R);
-        _setChannelFreq(LEDC_TIM_R, LEDC_CH_R, PIN_STEP_R, _currentR);
-    }
-
-    _leftSteps += (int32_t)(_currentL * dt);
-    _rightSteps += (int32_t)(_currentR * dt);
-
-    cfg.leftSpeed = (dirL == HIGH) ? _currentL : -_currentL;
-    cfg.rightSpeed = (dirR == HIGH) ? _currentR : -_currentR;
+    cfg.leftSpeed = _l.current;
+    cfg.rightSpeed = _r.current;
 }
 
 void MotorManager::stop() {
-    _currentL = 0.0f;
-    _currentR = 0.0f;
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_L);
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CH_R);
+    for (Channel* c : {&_l, &_r}) {
+        c->target = 0.0f;
+        c->current = 0.0f;
+        _apply(*c);
+    }
+    cfg.leftSpeed = cfg.rightSpeed = 0.0f;
 }
 
 void MotorManager::enable() {
@@ -153,6 +128,6 @@ void MotorManager::disable() {
 }
 
 void MotorManager::resetOdometry() {
-    _leftSteps = 0;
-    _rightSteps = 0;
+    _leftSteps = 0.0f;
+    _rightSteps = 0.0f;
 }

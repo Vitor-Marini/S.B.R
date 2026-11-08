@@ -113,14 +113,25 @@ frequência diferente:
 
 - **Entrada**: pitch do filtro Mahony + pitch rate do giroscópio
 - **Saída**: torque (0 a 100%)
-- **Controle**: PD com derivativo do gyro (não do ângulo)
+- **Controle**: PD com derivativo do erro filtrado
 
 ```
-torque = Kp × (setpoint − pitch) + Kd × (−pitch_rate)
+torque = Kp × erro + Ki × integral + Kd × derivativo_filtrado(erro)
+torque = -torque  (sinal invertido para equilíbrio)
 ```
 
-Usar o gyro rate direto no termo derivativo elimina o ruído amplificado
-que aconteceria ao derivar o ângulo.
+O termo derivativo usa a derivada do erro (não o gyro diretamente),
+passada por um filtro passa-baixa de 1ª ordem (α = 0.8):
+```
+rawDeriv = (erro_atual − erro_anterior) / dt
+derivFiltrado = 0.8 × derivFiltrado + 0.2 × rawDeriv
+```
+
+Em regime permanente, `derivFiltrado ≈ −pitchRate`, equivalente a usar o
+gyro rate diretamente, mas com a vantagem de rejeitar ruído.
+
+O torque é invertido (`torque = -torque`) para que um erro positivo
+(inclinação para frente) produza torque positivo (rodas giram para frente).
 
 Padrões: Kp = 25.0, Ki = 0.5, Kd = 0.8
 
@@ -212,6 +223,8 @@ O terminal serial agora aceita comandos:
 | `angle` | Mostra ângulo atual |
 | `save` / `load` | Salva/carrega config na flash |
 | `reset` | Zera odometria e integrais |
+| `pair` | Escaneia e conecta DS4 via BLE |
+| `ds4` | Mostra status do DS4 (conectado/endereço) |
 
 ---
 
@@ -277,6 +290,8 @@ módulos. **Verifique a configuração atual** (provavelmente full step).
 | Ki = 0 (sem integral) | Ki = 0.5 com anti-windup |
 | Só log serial | CLI interativo com comandos |
 | Debug só por Serial | Dashboard Web + Serial CLI |
+| Sem controle remoto | BLE UART + WiFi WebSocket |
+| PWM por software (ISR) | LEDC por hardware (zero CPU)
 
 ---
 
@@ -290,3 +305,239 @@ Antes de tentar equilibrar, complete os passos em
 3. Testar sentido dos motores via CLI → `left_reversed` / `right_reversed`
 4. Com `start`, observar se o robô tenta se equilibrar
 5. Ajustar Kp, Ki, Kd pelos sliders do dashboard ou CLI (`tune`)
+
+---
+
+## Controle de Velocidade (andar)
+
+Para o robô se mover, ele precisa inclinar para frente — a gravidade puxa,
+e os motores aceleram para "pegar" o robô, gerando movimento. Esse é o
+mesmo princípio do Segway.
+
+### Arquitetura de controle em cascata
+
+```
+Alvo de Velocidade (m/s)         Alvo de Curva (°/s)
+         │                               │
+         ▼                               ▼
+┌──────────────────┐          ┌──────────────────────┐
+│  Velocity PI      │          │  Turn Rate PI        │
+│  erro = alvo -    │          │  erro = alvo - yaw   │
+│  velocidade_real  │          │  rate_real           │
+│  saída = offset   │          │  saída = correção    │
+│  de ângulo (°)    │          │  diferencial (%)     │
+└────────┬─────────┘          └──────────┬───────────┘
+         │                               │
+         ▼                               ▼
+   ┌─────────────────────────────────────────┐
+   │         Balance PD (ângulo)              │
+   │  setpoint_efetivo = setpoint + offset    │
+   │  torque = Kp × erro + Kd × (-pitchRate) │
+   └────────────────┬────────────────────────┘
+                    │ torque
+                    ▼
+   ┌─────────────────────────────────────────┐
+   │         Distribuição Motor               │
+   │  left  = torque + correção_diferencial   │
+   │  right = torque - correção_diferencial   │
+   └─────────────────────────────────────────┘
+```
+
+### Estimativa de velocidade (odometria)
+
+A velocidade real é estimada pela contagem de passos dos steppers:
+
+```
+média_steps/s = (dLeft + dRight) / 2 / dt
+velocidade = média_steps/s / stepsPorVolta × π × diametroRoda
+```
+
+Isso é feito a cada ciclo de controle (~100 Hz) pelo `VelocityController`.
+A velocidade estimada é usada como feedback para o controle PI.
+
+### Ganhos do controle de velocidade
+
+Definidos em `config.hpp` como `velocityPid`:
+
+| Ganho | Padrão | Função |
+|-------|--------|--------|
+| Kp    | 8.0    | Inclinação por m/s de erro |
+| Ki    | 1.0    | Elimina erro estacionário |
+
+O offset de ângulo máximo é limitado a ±8° (não importa o quanto o usuário
+peça, o robô nunca vai inclinar mais que 8° para se mover).
+
+---
+
+## Controle por Joystick Virtual (Web)
+
+O dashboard web (`192.168.4.1`) agora tem um **joystick virtual** no centro
+da tela. Funciona:
+
+- **Desktop**: clique e arraste com o mouse
+- **Mobile**: toque e arraste com o dedo
+
+| Eixo | Controle | Intervalo |
+|------|----------|-----------|
+| Y (cima/baixo) | Velocidade (frente/trás) | -1.0 a +1.0 m/s |
+| X (esquerda/direita) | Curva (esquerda/direita) | -180 a +180 °/s |
+
+Quando o joystick é solto, a velocidade e a curva voltam a zero
+automaticamente.
+
+Os comandos são enviados via WebSocket:
+```json
+{"v": 0.5, "turn": -30}
+```
+
+---
+
+## Controle por Bluetooth (BLE UART)
+
+O ESP32-C3 também funciona como um **servidor BLE UART**.
+
+- Nome: `SBR_CONTROL`
+- Serviço: Nordic UART Service (NUS)
+- Conecte qualquer app de terminal BLE (ex: "Serial Bluetooth Terminal")
+- Envie comandos de texto:
+
+| Comando | Exemplo | Efeito |
+|---------|---------|--------|
+| `f 0.3` | `f 0.3` | Frente 0.3 m/s |
+| `v -0.5` | `v -0.5` | Trás 0.5 m/s |
+| `t 45` | `t 45` | Curva 45°/s direita |
+| `turn -30` | `turn -30` | Curva 30°/s esquerda |
+| `s` | `s` | Parar (zera velocidade e curva) |
+| `start` | `start` | Iniciar balanceamento |
+| `stop` | `stop` | Parar balanceamento |
+
+### Suporte nativo a PS4 (DualShock 4 via BLE)
+
+O robô agora funciona como **BLE Central** (cliente) para se conectar
+diretamente a um controle DualShock 4 via Bluetooth, sem necessidade
+de celular intermediário.
+
+#### Como usar
+
+1. Coloque o DS4 em modo de pareamento: pressione **PS + Share** por 3s
+   (o LED começa a piscar rapidamente)
+2. No CLI do robô, digite `pair`
+3. O robô escaneia por 10s procurando por "Wireless Controller"
+4. Quando encontrado, conecta automaticamente e se inscreve nas
+   notificações HID do serviço 0x1812
+
+#### Mapeamento de controles
+
+| Controle | Função no robô |
+|----------|----------------|
+| Left Stick Y (cima/baixo) | Velocidade (−1 a +1) |
+| Right Stick X (esquerda/direita) | Curva (−1 a +1) |
+| Triangle | **Start** — inicia balanceamento |
+| Circle | **Stop** — para balanceamento |
+| Square | **Calibrate** — recalibra giroscópio |
+| D-PAD | Reservado |
+| L1/R1/L2/R2/Share/Options | Reservado |
+
+#### Formato dos relatórios HID
+
+O DS4 envia relatórios em dois formatos:
+
+- **Simple (report ID 0x01)**: 9-11 bytes — usado quando não há entrada
+  no touchpad/giroscópio. Sticks nos bytes 1-4, botões nos bytes 5-8.
+- **Full (report ID 0x11)**: 78 bytes — ativado por leitura do feature
+  report 0x05. Inclui touchpad, giroscópio, acelerômetro, bateria.
+  Sticks nos bytes 3-6, botões nos bytes 7-9.
+
+| Byte (simple) | Byte (full) | Campo |
+|---------------|-------------|-------|
+| 1 | 3 | Left Stick X |
+| 2 | 4 | Left Stick Y |
+| 3 | 5 | Right Stick X |
+| 4 | 6 | Right Stick Y |
+| 5 | 7 | Botões 0 (D-PAD, Square, Cross, Circle, Triangle) |
+| 6 | 8 | Botões 1 (L1, R1, L2, R2, Share, Options, L3, R3) |
+| 7 | 9 | Botões 2 (PS, Touchpad) |
+
+#### Edge detection
+
+Os comandos de botão (start/stop/calibrate) disparam apenas na borda
+de subida — um `_prev` mantém o estado anterior e compara a cada ciclo.
+Isso evita disparos múltiplos enquanto o botão está pressionado.
+
+#### Reconexão automática
+
+Se a conexão cair (DS4 desliga ou sai do alcance), o robô tenta
+reconectar automaticamente após 5s, sem intervenção do usuário.
+O endereço MAC do último DS4 pareado é mantido em memória.
+
+#### Status no dashboard web
+
+O campo `ds4` no JSON de broadcast indica:
+- `"ds4":"conectado XX:XX:XX:XX:XX:XX"` — conectado
+- `"ds4":"desconectado"` — desconectado
+- `"ds4":"none"` — nunca pareou
+
+---
+
+## Resumo de todos os métodos de controle
+
+| Método | Hardware necessário | Alcance | Latência |
+|--------|-------------------|---------|----------|
+| Dashboard web + joystick virtual | WiFi (já incluso) | ~30m | ~50ms |
+| CLI serial | Cabo USB | 2m | <1ms |
+| BLE UART (app celular) | BLE (já incluso) | ~10m | ~50ms |
+| DS4 nativo (BLE HID) | BLE (já incluso) | ~10m | ~20ms |
+
+---
+
+## Correções de Build (pós-implementação)
+
+Durante a primeira compilação, foram encontrados e corrigidos:
+
+### 1. `AsyncWebSocket` com cópia deletada
+
+```cpp
+// ANTES (ERRO: copy constructor deleted − contém std::mutex)
+AsyncWebSocket _ws = AsyncWebSocket("/ws");
+
+// DEPOIS (inicialização direta com braces)
+AsyncWebSocket _ws{"/ws"};
+```
+
+O mesmo vale para `AsyncWebServer \_server{80}`.
+
+### 2. ArduinoJson v7 API obsoleta
+
+A lib `ArduinoJson ^7.4.2` usa a nova API v7. Correções aplicadas:
+
+| Antes (deprecated) | Depois |
+|-------------------|--------|
+| `StaticJsonDocument<N>` | `JsonDocument` |
+| `DynamicJsonDocument(N)` | `JsonDocument` |
+| `doc.containsKey("key")` | `!doc["key"].isNull()` |
+| `doc["key"]` (leitura direta) | `doc["key"].as\<float\>()` |
+| `doc["key"]` (bool) | `doc["key"].is\<bool\>() \&\& doc["key"].as\<bool\>()` |
+
+Arquivos alterados: `config.cpp`, `web_interface.cpp`.
+
+### 3. Pinos I2C explícitos para ESP32-C3
+
+```cpp
+// ANTES: usa pinos padrão da Wire (podem não ser GPIO 8/9)
+Wire.begin();
+
+// DEPOIS: explícito para o ESP32-C3 Supermini
+Wire.begin(8, 9);
+```
+
+### 4. Variável morta removida
+
+Em `balance.cpp`, a variável `dTerm` era calculada mas nunca usada
+(o D term real vem do `\_filteredDerivative`). Removida.
+
+### Métricas de build (release)
+
+| Recurso | Uso | Total |
+|---------|-----|-------|
+| Flash   | 87.0% | 1.310.720 bytes |
+| RAM     | 13.8% | 327.680 bytes |

@@ -6,13 +6,14 @@
 class MotorManager {
 public:
     void begin();
-    void setSpeeds(float leftSteps, float rightSteps);
+    void setSpeeds(float leftSteps, float rightSteps);  // alvo em passos/s (com sinal)
+    void update();                                      // avança a rampa; chamar todo loop
     void stop();
     void enable();
     void disable();
 
-    int32_t getLeftSteps() { return _leftSteps; }
-    int32_t getRightSteps() { return _rightSteps; }
+    float getLeftSteps() { return _leftSteps; }
+    float getRightSteps() { return _rightSteps; }
     void resetOdometry();
 
 private:
@@ -25,16 +26,22 @@ private:
     static const int LEDC_CH_R = 3;
     static const int LEDC_TIM_L = 0;
     static const int LEDC_TIM_R = 1;
-    static const int LEDC_RES = 10;
 
-    float _targetL = 0.0f, _targetR = 0.0f;
-    float _currentL = 0.0f, _currentR = 0.0f;
-    int32_t _leftSteps = 0, _rightSteps = 0;
-    uint32_t _lastUpdate = 0;
+    struct Channel {
+        int pinStep, pinDir, timer, channel;
+        bool reversed;
+        float target, current;  // passos/s com sinal
+        int freq;               // frequência aplicada; 0 = parado
+        int dir;                // nível aplicado no DIR; -1 = desconhecido
+    };
 
-    void _setChannelFreq(int timer, int channel, int pin, float stepsPerSec);
-    void _stopChannel(int channel, int pin);
-    void _rampMotor(float target, float& current, float maxDelta);
+    Channel _l{PIN_STEP_L, PIN_DIR_L, LEDC_TIM_L, LEDC_CH_L, false, 0, 0, 0, -1};
+    Channel _r{PIN_STEP_R, PIN_DIR_R, LEDC_TIM_R, LEDC_CH_R, false, 0, 0, 0, -1};
+    float _leftSteps = 0.0f, _rightSteps = 0.0f;
+    uint32_t _lastUpdateUs = 0;
+
+    void _setupChannel(Channel& c);
+    void _apply(Channel& c);
 };
 
 extern MotorManager motors;

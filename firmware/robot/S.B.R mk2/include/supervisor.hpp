@@ -29,6 +29,7 @@ private:
     RobotState _state = STATE_INIT;
     uint32_t _stateStartMs = 0;
     uint32_t _faultStartMs = 0;
+    uint32_t _nearSince = 0;
 
     void _setState(RobotState newState);
     void _onEnterState();

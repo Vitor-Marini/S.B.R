@@ -5,25 +5,31 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 
+// Ângulos em graus, taxas em °/s. Pitch positivo = inclinado para a frente
+// (lado para onde as rodas andam com comando positivo).
 class IMUManager {
 public:
     bool begin();
     void calibrateGyro(int samples = 500);
-    void read();
-    void setUseMahony(bool use);
+    void read();  // chamar exatamente a cada CONTROL_DT
 
-    float getPitch();
-    float getPitchRate();
-    float getYaw();
-    float getYawRate();
+    float getPitch() { return _pitch; }
+    float getPitchRate() { return _pitchRate; }
+    float getYaw() { return _yaw; }
+    float getYawRate() { return _yawRate; }
+    float getAccAngle() { return _accAngle; }
+    float getGyroAngle() { return _gyroAngle; }  // diagnóstico: só gyro integrado, zera no cal
+    float getTemp() { return _temp; }  // °C do sensor interno do MPU
 
     float getAccX() { return _ax; }
     float getAccY() { return _ay; }
     float getAccZ() { return _az; }
+    float getGyroX() { return _gx; }  // rad/s, sem offset
+    float getGyroY() { return _gy; }
+    float getGyroZ() { return _gz; }
 
 private:
     Adafruit_MPU6050 _mpu;
-    uint32_t _lastRead = 0;
 
     float _ax = 0.0f, _ay = 0.0f, _az = 0.0f;
     float _gx = 0.0f, _gy = 0.0f, _gz = 0.0f;
@@ -31,14 +37,13 @@ private:
 
     float _pitch = 0.0f;
     float _pitchRate = 0.0f;
+    float _accAngle = 0.0f;
+    float _gyroAngle = 0.0f;
     float _yaw = 0.0f;
     float _yawRate = 0.0f;
+    float _temp = 0.0f;
 
-    bool _useMahony = true;
-    bool _calibrated = false;
-
-    class MahonyFilter* _mahony = nullptr;
-    class ComplementaryFilter* _complementary = nullptr;
+    void _sample();
 };
 
 extern IMUManager imu;

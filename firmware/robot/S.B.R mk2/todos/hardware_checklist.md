@@ -6,8 +6,8 @@ Tarefas físicas para preparar o robô para o novo firmware.
 
 ## 1. Medir o diâmetro das rodas
 
-- [ ] Medir o diâmetro externo da roda em **milímetros**
-- [ ] Anotar o valor em `config.hpp` como `WHEEL_DIAMETER_MM`
+- [x] Medir o diâmetro externo da roda em **milímetros**
+- [x] Anotar o valor em `config.hpp` como `WHEEL_DIAMETER_MM`
 - Necessário para odometria e futura velocidade linear
 
 ---
