@@ -7,6 +7,7 @@ class CLI {
 public:
     void begin();
     void update();
+    void run(const String& line) { _processLine(line); }  // linha vinda da rede
 
 private:
     String _buffer;

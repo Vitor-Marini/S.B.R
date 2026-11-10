@@ -1,4 +1,5 @@
 #include "ble_gamepad.hpp"
+#include "net.hpp"
 #include "velocity.hpp"
 #include <NimBLEDevice.h>
 
@@ -15,11 +16,11 @@ static bool deviceConnected = false;
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s) {
         deviceConnected = true;
-        Serial.println("BLE: dispositivo conectado");
+        term.println("BLE: dispositivo conectado");
     }
     void onDisconnect(NimBLEServer* s) {
         deviceConnected = false;
-        Serial.println("BLE: dispositivo desconectado");
+        term.println("BLE: dispositivo desconectado");
         s->startAdvertising();
     }
 };
@@ -30,7 +31,7 @@ class CharCallbacks : public NimBLECharacteristicCallbacks {
         if (data.length() > 0) {
             String cmd = String(data.c_str());
             cmd.trim();
-            Serial.printf("BLE cmd: %s\n", cmd.c_str());
+            term.printf("BLE cmd: %s\n", cmd.c_str());
             _parseCommand(cmd);
         }
     }
@@ -84,7 +85,7 @@ void BLEManager::begin() {
     adv->setName("SBR_CONTROL");
     adv->start();
 
-    Serial.println("BLE UART: SBR_CONTROL pronto");
+    term.println("BLE UART: SBR_CONTROL pronto");
 }
 
 void BLEManager::update() {

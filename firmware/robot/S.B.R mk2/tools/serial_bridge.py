@@ -8,6 +8,7 @@
   para o PlotJuggler (Streaming → UDP Server, porta 9870, protocolo JSON).
 
 Uso: ~/.platformio/penv/bin/python tools/serial_bridge.py [/dev/ttyACM0]
+     ~/.platformio/penv/bin/python tools/serial_bridge.py udp:sbr.local   (sem cabo, via WiFi)
 Reconecta sozinho se o cabo cair.
 """
 import json
@@ -21,6 +22,31 @@ import serial
 PORT = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyACM0"
 TCP_PORT, UDP_PORT = 5555, 9870
 
+
+
+class UdpLink:
+    """Robô via WiFi (UDP 5555) com a mesma interface read/write da serial."""
+
+    def __init__(self, host):
+        self.addr = (socket.gethostbyname(host), 5555)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(0.1)
+        self.last_hello = 0.0
+
+    def write(self, data):
+        self.sock.sendto(data, self.addr)
+
+    def read(self, n):
+        # o robô responde para quem mandou o último pacote: "\n" periódico mantém o registro
+        if time.time() - self.last_hello > 2:
+            self.last_hello = time.time()
+            self.write(b"\n")
+        try:
+            return self.sock.recv(65536)
+        except socket.timeout:
+            return b""
+
+
 ser = None
 clients = []
 lock = threading.Lock()
@@ -31,7 +57,7 @@ def send_serial(data: bytes):
     try:
         if ser:
             ser.write(data)
-    except serial.SerialException:
+    except (serial.SerialException, OSError):
         pass  # loop de leitura cuida da reconexão
 
 
@@ -47,6 +73,25 @@ def serve_client(conn):
         with lock:
             clients.remove(conn)
         conn.close()
+
+
+def _selftest():
+    """Cliente que nunca lê não trava a ponte e continua conectado; cliente bom segue recebendo."""
+    slow_a, slow_b = socket.socketpair()
+    good_a, good_b = socket.socketpair()
+    for s in (slow_a, good_a):
+        threading.Thread(target=serve_client, args=(s,), daemon=True).start()
+    time.sleep(0.1)
+    t0 = time.time()
+    got = 0
+    for _ in range(4000):
+        handle_line(b">x:1.0" + b" " * 500 + b"\n")
+        got += len(good_b.recv(4096))
+    time.sleep(0.1)
+    assert time.time() - t0 < 5, "ponte travou"
+    assert slow_a in clients, "cliente que só escreve foi derrubado"
+    assert good_a in clients and got > 1_000_000, "cliente bom parou de receber"
+    print("selftest ok")
 
 
 def tcp_server():
@@ -68,9 +113,16 @@ def handle_line(raw: bytes):
     with lock:
         for c in list(clients):
             try:
-                c.sendall(raw)
-            except OSError:
+                # sem bloquear: cliente que não lê (só manda `drive`) perde linhas, mas continua
+                # conectado e comandando; nunca trava a ponte nem os outros clientes
+                c.send(raw, socket.MSG_DONTWAIT)
+            except BlockingIOError:
                 pass
+            except OSError:
+                try:
+                    c.shutdown(socket.SHUT_RDWR)  # cliente morto: serve_client sai e o remove
+                except OSError:
+                    pass
     line = raw.decode(errors="replace").rstrip()
     while line.startswith("sbr> "):  # prompt do CLI grudado na linha
         line = line[5:]
@@ -91,7 +143,10 @@ def main():
     print(f"ponte: {PORT} | TCP {TCP_PORT} | PlotJuggler UDP {UDP_PORT}", flush=True)
     while True:
         try:
-            ser = serial.Serial(PORT, 115200, timeout=0.1)
+            if PORT.startswith("udp:"):
+                ser = UdpLink(PORT[4:])
+            else:
+                ser = serial.Serial(PORT, 115200, timeout=0.1)
             print(f"[conectado em {PORT}]", flush=True)
             buf = b""
             while True:
@@ -107,6 +162,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if PORT == "--selftest":
+        _selftest()
+        sys.exit()
     try:
         main()
     except KeyboardInterrupt:

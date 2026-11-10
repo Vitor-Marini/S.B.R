@@ -24,7 +24,7 @@ private:
     float _angleError = 0.0f;
     float _speed = 0.0f;
     float _angleOffset = 0.0f;
-    float _turnOffset = 0.0f;  // passos/s diferenciais (Fase 5)
+    float _turnOffset = 0.0f;  // m/s de diferença entre rodas; positivo = vira à esquerda
 };
 
 extern BalanceController balance;

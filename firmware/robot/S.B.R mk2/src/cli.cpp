@@ -1,4 +1,5 @@
 #include "cli.hpp"
+#include "net.hpp"
 #include "config.hpp"
 #include "supervisor.hpp"
 #include "imu_manager.hpp"
@@ -11,8 +12,8 @@
 CLI cli;
 
 void CLI::begin() {
-    Serial.println("\nS.B.R mk2 — Terminal Interativo");
-    Serial.println("Digite 'help' para comandos disponíveis.");
+    term.println("\nS.B.R mk2 — Terminal Interativo");
+    term.println("Digite 'help' para comandos disponíveis.");
     _printPrompt();
 }
 
@@ -20,10 +21,10 @@ void CLI::update() {
     // formato Teleplot (">nome:valor"), 50 Hz
     if (_streaming && millis() - _lastStream >= 20) {
         _lastStream = millis();
-        Serial.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>state:%d\n>tick:%d\n>temp:%.1f\n",
+        term.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>yrate:%.1f\n>state:%d\n>tick:%d\n>temp:%.1f\n",
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw(), balance.getSpeed(), cfg.pidOutput,
-                      balance.getAngleError(), velCtrl.getAngleOffset(),
+                      balance.getAngleError(), velCtrl.getAngleOffset(), cfg.yawRate,
                       cfg.robotState, cfg.tickHz, imu.getTemp());
     }
     while (Serial.available()) {
@@ -67,7 +68,7 @@ void CLI::_processLine(const String& line) {
     } else if (command == "status" || command == "st") {
         cfg.print();
     } else if (command == "state") {
-        Serial.printf("Estado atual: %s\n", supervisor.getStateName());
+        term.printf("Estado atual: %s\n", supervisor.getStateName());
     } else if (command == "tune") {
         // tune <kp|ki|kd|setpoint> <value>
         int space2 = args.indexOf(' ');
@@ -91,12 +92,17 @@ void CLI::_processLine(const String& line) {
             else if (param == "abx") { cfg.filter.accBiasX = value; }
             else if (param == "abz") { cfg.filter.accBiasZ = value; }
             else if (param == "alpha" && value > 0 && value < 1) { cfg.filter.complementaryAlpha = value; }
-            else { Serial.println("Parâmetro inválido. Use: kp, ki, kd, sp, ykp, yki, ykd, spr, accel, vmax, vkp, vki, abx, abz, alpha"); return; }
+            else { term.println("Parâmetro inválido. Use: kp, ki, kd, sp, ykp, yki, ykd, spr, accel, vmax, vkp, vki, abx, abz, alpha"); return; }
 
-            cfg.save();
-            Serial.printf("%s = %.3f\n", param.c_str(), value);
+            if (supervisor.getState() == STATE_ACTIVE) {
+                cfg.dirty = true;  // supervisor grava ao sair do ACTIVE
+                term.printf("%s = %.3f (grava ao parar)\n", param.c_str(), value);
+            } else {
+                cfg.save();
+                term.printf("%s = %.3f\n", param.c_str(), value);
+            }
         } else {
-            Serial.println("Use: tune <param> <value>");
+            term.println("Use: tune <param> <value>");
         }
     } else if (command == "motor") {
         // motor <left|right> <speed>
@@ -111,39 +117,50 @@ void CLI::_processLine(const String& line) {
 
             if (which == "left") {
                 motors.setSpeeds(steps, 0);
-                Serial.printf("Motor L: %.0f steps/s\n", steps);
+                term.printf("Motor L: %.0f steps/s\n", steps);
             } else if (which == "right") {
                 motors.setSpeeds(0, steps);
-                Serial.printf("Motor R: %.0f steps/s\n", steps);
+                term.printf("Motor R: %.0f steps/s\n", steps);
             } else if (which == "both") {
                 motors.setSpeeds(steps, steps);
-                Serial.printf("Motor L+R: %.0f steps/s\n", steps);
+                term.printf("Motor L+R: %.0f steps/s\n", steps);
             } else {
-                Serial.println("Use: motor <left|right|both> <steps/s>");
+                term.println("Use: motor <left|right|both> <steps/s>");
             }
         } else {
-            Serial.println("Use: motor <left|right|both> <steps/s>");
+            term.println("Use: motor <left|right|both> <steps/s>");
         }
     } else if (command == "save") {
         cfg.save();
-        Serial.println("Config salva.");
+        term.println("Config salva.");
     } else if (command == "load") {
         cfg.load();
-        Serial.println("Config carregada.");
+        term.println("Config carregada.");
     } else if (command == "angle") {
         // não chama imu.read(): só o tick de controle lê o IMU (dt fixo)
-        Serial.printf("Pitch: %.2f°  Acc: %.2f°  Gyro-int: %.2f°  Rate: %.2f°/s  Yaw: %.2f°\n",
+        term.printf("Pitch: %.2f°  Acc: %.2f°  Gyro-int: %.2f°  Rate: %.2f°/s  Yaw: %.2f°\n",
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw());
-        Serial.printf("Tick: %d Hz  pior run: %lu us\n", cfg.tickHz, (unsigned long)cfg.tickMaxUs);
+        term.printf("Tick: %d Hz  pior run: %lu us\n", cfg.tickHz, (unsigned long)cfg.tickMaxUs);
     } else if (command == "raw") {
-        Serial.printf("acc m/s2: %6.2f %6.2f %6.2f | gyro deg/s: %7.2f %7.2f %7.2f\n",
+        term.printf("acc m/s2: %6.2f %6.2f %6.2f | gyro deg/s: %7.2f %7.2f %7.2f\n",
                       imu.getAccX(), imu.getAccY(), imu.getAccZ(),
                       degrees(imu.getGyroX()), degrees(imu.getGyroY()), degrees(imu.getGyroZ()));
-        Serial.printf("temp: %.1f C\n", imu.getTemp());
+        term.printf("temp: %.1f C  falhas I2C: %lu\n", imu.getTemp(), (unsigned long)imu.getFailCount());
     } else if (command == "stream") {
         _streaming = !_streaming;
-        if (!_streaming) Serial.println("stream off");
+        if (!_streaming) term.println("stream off");
+    } else if (command == "wifi") {
+        // wifi <rede> <senha> → salva e conecta; wifi → status. (rede sem espaços)
+        int sp = args.indexOf(' ');
+        if (sp > 0) {
+            cfg.wifiSsid = args.substring(0, sp);
+            cfg.wifiPass = args.substring(sp + 1);
+            cfg.save();
+            net.begin();
+        } else {
+            net.printStatus();
+        }
     } else if (command == "regs") {
         // esperado: 75=68 6B=01 19=00 1A=03 1B=08 1C=10
         for (uint8_t r : {0x75, 0x6B, 0x19, 0x1A, 0x1B, 0x1C}) {
@@ -151,61 +168,59 @@ void CLI::_processLine(const String& line) {
             Wire.write(r);
             Wire.endTransmission(false);
             Wire.requestFrom(0x68, 1);
-            Serial.printf("reg 0x%02X = 0x%02X\n", r, Wire.available() ? Wire.read() : 0xFF);
+            term.printf("reg 0x%02X = 0x%02X\n", r, Wire.available() ? Wire.read() : 0xFF);
         }
-    } else if (command == "vel") {
-        float val = args.toFloat();
-        velCtrl.setTarget(val);
-        Serial.printf("Velocidade alvo: %.2f m/s\n", val);
-    } else if (command == "turn") {
-        float val = args.toFloat();
-        velCtrl.setTurnRate(val);
-        Serial.printf("Curva alvo: %.1f °/s\n", val);
+    } else if (command == "drive") {
+        // drive <m/s> <°/s>  — API única de movimento (PC, câmera, IA...). Sem resposta, para
+        // poder ser enviado a 10–20 Hz; parar de enviar por 0,5 s = parar o robô.
+        int sp = args.indexOf(' ');
+        velCtrl.setTarget(args.substring(0, sp > 0 ? sp : args.length()).toFloat());
+        velCtrl.setTurnRate(sp > 0 ? args.substring(sp + 1).toFloat() : 0.0f);
     } else if (command == "pair") {
         ds4Ctrl.startPairing();
     } else if (command == "ds4") {
-        Serial.printf("DS4: %s\n", ds4Ctrl.isConnected() ? "Conectado" : "Desconectado");
+        term.printf("DS4: %s\n", ds4Ctrl.isConnected() ? "Conectado" : "Desconectado");
         if (ds4Ctrl.isConnected()) {
             auto& s = ds4Ctrl.getState();
-            Serial.printf("  Endereco: %s\n", ds4Ctrl.getAddress().c_str());
-            Serial.printf("  Stick L: %.2f  Stick R: %.2f\n", s.stickLY, s.stickRX);
-            Serial.printf("  Botoes: T=%d C=%d X=%d S=%d | PS=%d\n",
+            term.printf("  Endereco: %s\n", ds4Ctrl.getAddress().c_str());
+            term.printf("  Stick L: %.2f  Stick R: %.2f\n", s.stickLY, s.stickRX);
+            term.printf("  Botoes: T=%d C=%d X=%d S=%d | PS=%d\n",
                           s.triangle, s.circle, s.cross, s.square, s.ps);
         }
     } else if (command == "reset") {
         motors.resetOdometry();
         balance.resetIntegral();
         velCtrl.reset();
-        Serial.println("Odometria, integrais e velocidade resetados.");
+        term.println("Odometria, integrais e velocidade resetados.");
     } else {
-        Serial.printf("Comando desconhecido: %s\n", command.c_str());
-        Serial.println("Digite 'help' para comandos.");
+        term.printf("Comando desconhecido: %s\n", command.c_str());
+        term.println("Digite 'help' para comandos.");
     }
 }
 
 void CLI::_printPrompt() {
-    Serial.print("sbr> ");
+    term.print("sbr> ");
 }
 
 void CLI::_printHelp() {
-    Serial.println("\n--- Comandos ---");
-    Serial.println("  start              → Iniciar balanceamento");
-    Serial.println("  stop               → Parar balanceamento");
-    Serial.println("  calibrate (cal)    → Recalibrar giroscópio");
-    Serial.println("  status (st)        → Mostrar configuração e telemetria");
-    Serial.println("  state              → Mostrar estado atual");
-    Serial.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|abx|abz|alpha> <val> → Ajustar PID/motor");
-    Serial.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
-    Serial.println("  vel <m/s>         → Velocidade alvo (ex: 0.5)");
-    Serial.println("  turn <°/s>        → Curva alvo (ex: -30)");
-    Serial.println("  angle             → Ler ângulo atual");
-    Serial.println("  raw               → Acelerômetro, gyro e temperatura");
-    Serial.println("  stream            → Liga/desliga gráficos (Teleplot) a 50 Hz");
-    Serial.println("  save              → Salvar config na flash");
-    Serial.println("  load              → Carregar config da flash");
-    Serial.println("  reset             → Resetar odometria e integrais");
-    Serial.println("  pair              → Escanear e conectar DS4 via BLE");
-    Serial.println("  ds4               → Status do controle DS4");
-    Serial.println("  help              → Este menu");
-    Serial.println("----------------\n");
+    term.println("\n--- Comandos ---");
+    term.println("  start              → Iniciar balanceamento");
+    term.println("  stop               → Parar balanceamento");
+    term.println("  calibrate (cal)    → Recalibrar giroscópio");
+    term.println("  status (st)        → Mostrar configuração e telemetria");
+    term.println("  state              → Mostrar estado atual");
+    term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|abx|abz|alpha> <val> → Ajustar PID/motor");
+    term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
+    term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
+    term.println("  angle             → Ler ângulo atual");
+    term.println("  raw               → Acelerômetro, gyro e temperatura");
+    term.println("  stream            → Liga/desliga gráficos (Teleplot) a 50 Hz");
+    term.println("  save              → Salvar config na flash");
+    term.println("  load              → Carregar config da flash");
+    term.println("  reset             → Resetar odometria e integrais");
+    term.println("  wifi [<rede> <senha>] → Status / salvar rede de casa (UDP 5555, sbr.local)");
+    term.println("  pair              → Escanear e conectar DS4 via BLE");
+    term.println("  ds4               → Status do controle DS4");
+    term.println("  help              → Este menu");
+    term.println("----------------\n");
 }

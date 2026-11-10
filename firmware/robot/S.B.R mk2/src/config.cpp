@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "net.hpp"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
@@ -6,7 +7,7 @@ ConfigManager cfg;
 
 void ConfigManager::begin() {
     if (!LittleFS.begin(true)) {
-        Serial.println("LittleFS mount failed");
+        term.println("LittleFS mount failed");
     }
     load();
 }
@@ -14,7 +15,7 @@ void ConfigManager::begin() {
 bool ConfigManager::load() {
     File file = LittleFS.open("/config.json", "r");
     if (!file) {
-        Serial.println("Config: arquivo não encontrado, usando padrões.");
+        term.println("Config: arquivo não encontrado, usando padrões.");
         save();
         return false;
     }
@@ -24,7 +25,7 @@ bool ConfigManager::load() {
     file.close();
 
     if (err) {
-        Serial.println("Config: erro JSON, usando padrões.");
+        term.println("Config: erro JSON, usando padrões.");
         return false;
     }
 
@@ -38,7 +39,7 @@ bool ConfigManager::load() {
     };
 
     readGains("bal", anglePid);  // chave nova: ignora ganhos antigos em outra unidade
-    readGains("yaw", yawPid);
+    readGains("turn", yawPid);  // chave nova: ignora ganhos antigos em passos/s
     readGains("spd", velocityPid);  // chave nova: ignora ganhos antigos
 
     if (!doc["setpoint"].isNull())       setpoint = doc["setpoint"].as<float>();
@@ -57,15 +58,18 @@ bool ConfigManager::load() {
     if (!doc["max_velocity"].isNull()) maxVelocity = doc["max_velocity"].as<float>();
     if (!doc["max_turn_rate"].isNull()) maxTurnRate = doc["max_turn_rate"].as<float>();
     if (doc["ble_enabled"].is<bool>()) bleEnabled = doc["ble_enabled"].as<bool>();
+    if (!doc["wifi_ssid"].isNull()) wifiSsid = doc["wifi_ssid"].as<String>();
+    if (!doc["wifi_pass"].isNull()) wifiPass = doc["wifi_pass"].as<String>();
 
-    Serial.println("Config: carregada.");
+    term.println("Config: carregada.");
     return true;
 }
 
 bool ConfigManager::save() {
-    File file = LittleFS.open("/config.json", "w");
+    // grava em arquivo temporário e renomeia: queda de bateria no meio não corrompe a config
+    File file = LittleFS.open("/config.tmp", "w");
     if (!file) {
-        Serial.println("Config: erro ao salvar.");
+        term.println("Config: erro ao salvar.");
         return false;
     }
 
@@ -78,7 +82,7 @@ bool ConfigManager::save() {
     };
 
     writeGains("bal", anglePid);
-    writeGains("yaw", yawPid);
+    writeGains("turn", yawPid);
     writeGains("spd", velocityPid);
 
     doc["setpoint"] = setpoint;
@@ -97,39 +101,46 @@ bool ConfigManager::save() {
     doc["max_velocity"] = maxVelocity;
     doc["max_turn_rate"] = maxTurnRate;
     doc["ble_enabled"] = bleEnabled;
+    doc["wifi_ssid"] = wifiSsid;
+    doc["wifi_pass"] = wifiPass;
 
-    serializeJson(doc, file);
+    bool ok = serializeJson(doc, file) > 0;
     file.close();
+    if (!ok || !LittleFS.rename("/config.tmp", "/config.json")) {
+        term.println("Config: erro ao salvar.");
+        return false;
+    }
+    dirty = false;
     return true;
 }
 
 void ConfigManager::print() {
-    Serial.println("\n========== CONFIG ==========");
-    Serial.printf("Setpoint:     %.1f\n", setpoint);
-    Serial.printf("Failsafe:     %.1f\n", failsafeAngle);
-    Serial.print ("--- Balance PD (m/s² por ° e por °/s) ---\n");
-    Serial.printf("  Kp: %.2f  Ki: %.3f  Kd: %.3f\n", anglePid.kp, anglePid.ki, anglePid.kd);
-    Serial.print ("--- Yaw PID ---\n");
-    Serial.printf("  Kp: %.2f  Ki: %.3f  Kd: %.3f\n", yawPid.kp, yawPid.ki, yawPid.kd);
-    Serial.print ("--- Motor ---\n");
-    Serial.printf("  Steps/rev:   %.0f\n", motor.stepsPerRev);
-    Serial.printf("  Wheel (mm):  %.1f\n", motor.wheelDiameterMm);
-    Serial.printf("  Max accel:   %.0f\n", motor.maxAccelStepsS2);
-    Serial.printf("  L rev: %d  R rev: %d\n", motor.leftReversed, motor.rightReversed);
-    Serial.print ("--- Velocity ---\n");
-    Serial.printf("  PI: Kp %.2f  Ki %.2f (° por m/s)\n", velocityPid.kp, velocityPid.ki);
-    Serial.printf("  Max V:  %.2f m/s\n", maxVelocity);
-    Serial.printf("  Max T:  %.1f °/s\n", maxTurnRate);
-    Serial.printf("  BLE:    %s\n", bleEnabled ? "ON" : "OFF");
-    Serial.print ("--- Filter ---\n");
-    Serial.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);
-    Serial.printf("  Comp alpha: %.3f\n", filter.complementaryAlpha);
-    Serial.print ("--- Telemetry ---\n");
-    Serial.printf("  State:  %d\n", robotState);
-    Serial.printf("  Pitch:  %.2f\n", pitchAngle);
-    Serial.printf("  Rate:   %.2f\n", pitchRate);
-    Serial.printf("  Yaw:    %.2f\n", yawAngle);
-    Serial.printf("  Output: %.2f\n", pidOutput);
-    Serial.printf("  L spd:  %.1f  R spd: %.1f\n", leftSpeed, rightSpeed);
-    Serial.println("=============================\n");
+    term.println("\n========== CONFIG ==========");
+    term.printf("Setpoint:     %.1f\n", setpoint);
+    term.printf("Failsafe:     %.1f\n", failsafeAngle);
+    term.print ("--- Balance PD (m/s² por ° e por °/s) ---\n");
+    term.printf("  Kp: %.2f  Ki: %.3f  Kd: %.3f\n", anglePid.kp, anglePid.ki, anglePid.kd);
+    term.print ("--- Yaw PID ---\n");
+    term.printf("  Kp: %.4f  Ki: %.3f  Kd: %.3f\n", yawPid.kp, yawPid.ki, yawPid.kd);
+    term.print ("--- Motor ---\n");
+    term.printf("  Steps/rev:   %.0f\n", motor.stepsPerRev);
+    term.printf("  Wheel (mm):  %.1f\n", motor.wheelDiameterMm);
+    term.printf("  Max accel:   %.0f\n", motor.maxAccelStepsS2);
+    term.printf("  L rev: %d  R rev: %d\n", motor.leftReversed, motor.rightReversed);
+    term.print ("--- Velocity ---\n");
+    term.printf("  PI: Kp %.2f  Ki %.2f (° por m/s)\n", velocityPid.kp, velocityPid.ki);
+    term.printf("  Max V:  %.2f m/s\n", maxVelocity);
+    term.printf("  Max T:  %.1f °/s\n", maxTurnRate);
+    term.printf("  BLE:    %s\n", bleEnabled ? "ON" : "OFF");
+    term.print ("--- Filter ---\n");
+    term.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);
+    term.printf("  Comp alpha: %.3f\n", filter.complementaryAlpha);
+    term.print ("--- Telemetry ---\n");
+    term.printf("  State:  %d\n", robotState);
+    term.printf("  Pitch:  %.2f\n", pitchAngle);
+    term.printf("  Rate:   %.2f\n", pitchRate);
+    term.printf("  Yaw:    %.2f\n", yawAngle);
+    term.printf("  Output: %.2f\n", pidOutput);
+    term.printf("  L spd:  %.1f  R spd: %.1f\n", leftSpeed, rightSpeed);
+    term.println("=============================\n");
 }

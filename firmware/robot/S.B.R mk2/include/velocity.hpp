@@ -14,7 +14,7 @@ public:
 
     void update();
     float getAngleOffset();
-    float getTurnOffset();
+    float getTurnOffset();  // m/s de diferença entre rodas
     void reset();
 
 private:
@@ -26,6 +26,10 @@ private:
     float _velIntegral = 0.0f;
     float _turnIntegral = 0.0f;
     float _estimatedVelocity = 0.0f;
+    uint32_t _lastCmdMs = 0;
+    float _rampedTarget = 0.0f;
+    static constexpr float TARGET_ACCEL = 0.3f;  // m/s²
+    static const uint32_t CMD_TIMEOUT_MS = 500;
 };
 
 extern VelocityController velCtrl;

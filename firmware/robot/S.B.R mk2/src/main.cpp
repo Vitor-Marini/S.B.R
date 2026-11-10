@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "net.hpp"
 #include "config.hpp"
 #include "motor.hpp"
 #include "imu_manager.hpp"
@@ -19,9 +20,10 @@ static uint32_t lastDs4Handle = 0;
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.println("\n\n=== S.B.R mk2 ===");
+    term.println("\n\n=== S.B.R mk2 ===");
 
     cfg.begin();
+    net.begin();
 
     motors.begin();
 
@@ -98,6 +100,7 @@ void loop() {
 #endif
 
     cli.update();
+    net.update();
 
     delay(1);
 }

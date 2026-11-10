@@ -105,6 +105,11 @@ Confirmado OK: os dois motores giram suave a 500 passos/s; com o mesmo comando, 
 
 ## Fase 5 — Curva, controle, web (um de cada vez)
 
+> 🟡 2026-11-08: API única de movimento `drive <m/s> <°/s>` (+ = frente/esquerda) com **watchdog de 0,5 s** dentro de `setTarget/setTurnRate` (vale p/ CLI, web, BLE, DS4). Alvo de velocidade limitado a vmax/2. Malha de curva PI em m/s de diferença entre rodas (`ykp` 0,001, `yki` 0,01; 0,003 amplificava o tremor). Sinais verificados: giro p/ esquerda = gyro Z+; motor "L" do firmware = roda DIREITA. Teste: +30°/s por 2 s → +60,5° ✅. `tools/teleop.py` (teclado → ponte TCP). Qualquer programa (câmera/IA) controla mandando `drive v w` na TCP 5555.
+> Andar p/ frente/trás "não funcionava": robô estava **preso pelo cabo/mão** (segurava +1° de setpoint sem andar). Com cabo folgado anda; deriva p/ trás era `sp` baixo → `sp` 6,8 (voff ≈ 0). Degrau no alvo dava tranco >0,3 m/s → rampa de 0,3 m/s² no alvo. `vkp` 15 instável (fica 4). teleop virou segurar-para-mover.
+> Pendente: estimar velocidade pela taxa de passos aplicada (abaixo de 20 passos/s a roda não gira, mas o integral conta).
+> Próximo: WiFi/web com a mesma API (medir `tick`), trocar senha do AP; DS4 quando chegar.
+
 - **Uma** malha de yaw só (taxa de curva via gyro Z em °/s; apagar heading-hold do `balance.cpp`).
 - Religar DS4 → testar; depois WiFi/web → testar. Logar `dt` máximo do loop; se passar de 6 ms com rádio ligado, rádio é o culpado.
 

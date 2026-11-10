@@ -22,7 +22,7 @@ constexpr uint32_t CONTROL_PERIOD_US = 5000;  // 200 Hz
 constexpr float CONTROL_DT = CONTROL_PERIOD_US * 1e-6f;
 
 struct FilterParams {
-    float complementaryAlpha = 0.98f;  // tau = dt*a/(1-a) ≈ 0,25 s a 200 Hz
+    float complementaryAlpha = 0.995f;  // tau = dt*a/(1-a) ≈ 1 s a 200 Hz
     float accBiasX = 0.0f;             // m/s², medido deitando o robô de frente/costas
     float accBiasZ = 0.0f;
 };
@@ -32,18 +32,21 @@ public:
     void begin();
 
     PIDGains anglePid{0.35f, 0.0f, 0.03f};  // kp (m/s²)/°, kd (m/s²)/(°/s); ki não usado
-    PIDGains velocityPid{4.0f, 0.0f, 0.0f};  // ° de offset por m/s de erro de velocidade
-    PIDGains yawPid{2.0f, 0.02f, 0.5f};
+    PIDGains velocityPid{4.0f, 1.0f, 0.0f};  // ° de offset por m/s de erro de velocidade
+    PIDGains yawPid{0.001f, 0.01f, 0.0f};  // curva: (m/s) por °/s de erro; kd não usado
 
-    float maxVelocity = 1.5f;
+    float maxVelocity = 0.8f;
     float maxTurnRate = 180.0f;
 
     bool bleEnabled = true;
 
+    String wifiSsid;  // rede de casa; salva só na flash (comando `wifi`), nunca no git
+    String wifiPass;
+
     MotorParams motor;
     FilterParams filter;
 
-    float setpoint = 0.0f;
+    float setpoint = 6.8f;  // ponto de equilíbrio medido (montagem atual)
     float failsafeAngle = 45.0f;
 
     float pitchAngle = 0.0f;
@@ -56,6 +59,8 @@ public:
     int robotState = 0;
     int tickHz = 0;          // ticks de controle no último segundo (alvo 200)
     uint32_t tickMaxUs = 0;  // pior tempo de supervisor.run() no último segundo
+
+    bool dirty = false;  // mudou em ACTIVE; grava ao sair (escrita na flash trava o loop)
 
     bool load();
     bool save();

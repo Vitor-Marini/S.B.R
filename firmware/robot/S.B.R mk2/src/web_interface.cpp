@@ -1,4 +1,5 @@
 #include "web_interface.hpp"
+#include "net.hpp"
 #include "config.hpp"
 #include "supervisor.hpp"
 #include "velocity.hpp"
@@ -11,11 +12,11 @@ WebManager web;
 
 void WebManager::begin() {
     WiFi.softAP("SBR_ROBOT", "12345678");
-    Serial.print("WiFi AP: ");
-    Serial.println(WiFi.softAPIP());
+    term.print("WiFi AP: ");
+    term.println(WiFi.softAPIP());
 
     if (!LittleFS.begin(true)) {
-        Serial.println("Erro LittleFS");
+        term.println("Erro LittleFS");
         return;
     }
 
@@ -25,7 +26,7 @@ void WebManager::begin() {
     _server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
     _server.begin();
-    Serial.println("Web server iniciado.");
+    term.println("Web server iniciado.");
 }
 
 void WebManager::broadcast() {
@@ -75,12 +76,12 @@ void WebManager::_sendConfig(AsyncWebSocketClient* client) {
 void WebManager::_onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                             AwsEventType type, void* arg, uint8_t* data, size_t len) {
     if (type == WS_EVT_CONNECT) {
-        Serial.printf("WebSocket cliente %u conectado\n", client->id());
+        term.printf("WebSocket cliente %u conectado\n", client->id());
         web._sendConfig(client);
     }
 
     if (type == WS_EVT_DISCONNECT) {
-        Serial.printf("WebSocket cliente %u desconectado\n", client->id());
+        term.printf("WebSocket cliente %u desconectado\n", client->id());
     }
 
     if (type == WS_EVT_DATA) {
@@ -104,7 +105,7 @@ void WebManager::_onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client
 
             if (changed) {
                 cfg.save();
-                Serial.println("PID params atualizados via WebSocket");
+                term.println("PID params atualizados via WebSocket");
             }
         }
     }

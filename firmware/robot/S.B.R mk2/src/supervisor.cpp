@@ -1,4 +1,5 @@
 #include "supervisor.hpp"
+#include "net.hpp"
 #include "config.hpp"
 #include "imu_manager.hpp"
 #include "balance.hpp"
@@ -49,8 +50,14 @@ void Supervisor::_setState(RobotState newState) {
 }
 
 void Supervisor::_onEnterState() {
-    Serial.print(">> Estado: ");
-    Serial.println(getStateName());
+    term.print(">> Estado: ");
+    term.println(getStateName());
+
+    // motores já parados nestes estados: hora segura de gravar o que foi ajustado em ACTIVE
+    if (cfg.dirty && (_state == STATE_IDLE || _state == STATE_FAULT)) {
+        motors.stop();
+        cfg.save();
+    }
 
     switch (_state) {
         case STATE_ACTIVE:
@@ -60,11 +67,12 @@ void Supervisor::_onEnterState() {
             break;
         case STATE_STARTING:
             motors.stop();
-            Serial.println("Segure o robô em pé no ponto de equilíbrio...");
+            term.println("Segure o robô em pé no ponto de equilíbrio...");
             break;
         case STATE_FAULT:
             motors.stop();
             balance.resetIntegral();
+            balance.setTurnOffset(0.0f);
             break;
         case STATE_IDLE:
             motors.stop();
@@ -80,7 +88,7 @@ void Supervisor::_runInit() {
     if (imu.begin()) {
         _setState(STATE_CALIBRATE);
     } else {
-        Serial.println("Falha no MPU6050. Tentando novamente...");
+        term.println("Falha no MPU6050. Tentando novamente...");
         delay(1000);
     }
 }
@@ -113,7 +121,7 @@ void Supervisor::_runStarting() {
     }
 
     if (millis() - _stateStartMs > 10000) {
-        Serial.println("Não ficou em pé em 10 s. Voltando para IDLE.");
+        term.println("Não ficou em pé em 10 s. Voltando para IDLE.");
         _nearSince = 0;
         _setState(STATE_IDLE);
     }
@@ -122,17 +130,25 @@ void Supervisor::_runStarting() {
 void Supervisor::_runActive() {
     imu.read();
 
-    float angle = imu.getPitch();
-    if (fabsf(angle) > cfg.failsafeAngle) {
-        Serial.printf("FALHA: Ângulo %.1f° excede limite %.1f°\n", angle, cfg.failsafeAngle);
+    if (!imu.healthy()) {
+        term.println("FALHA: IMU sem resposta (I2C).");
         velCtrl.reset();
         _setState(STATE_FAULT);
         return;
     }
 
-    // Fase 4: malha de velocidade → offset de ângulo. Curva (Fase 5) ainda desligada.
+    float angle = imu.getPitch();
+    if (fabsf(angle) > cfg.failsafeAngle) {
+        term.printf("FALHA: Ângulo %.1f° excede limite %.1f°\n", angle, cfg.failsafeAngle);
+        velCtrl.reset();
+        _setState(STATE_FAULT);
+        return;
+    }
+
+    // malha de velocidade → offset de ângulo; malha de curva → diferença entre rodas
     velCtrl.update();
     balance.setAngleOffset(velCtrl.getAngleOffset());
+    balance.setTurnOffset(velCtrl.getTurnOffset());
     balance.compute();
 }
 
@@ -149,7 +165,7 @@ void Supervisor::_runFault() {
         if (_faultStartMs == 0) {
             _faultStartMs = millis();
         } else if (millis() - _faultStartMs > 3000) {
-            Serial.println("Recuperação de falha. Voltando para IDLE.");
+            term.println("Recuperação de falha. Voltando para IDLE.");
             _faultStartMs = 0;
             balance.resetIntegral();
             _setState(STATE_IDLE);

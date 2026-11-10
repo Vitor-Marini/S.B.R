@@ -1,4 +1,5 @@
 #include "ds4_controller.hpp"
+#include "net.hpp"
 
 DS4Controller ds4Ctrl;
 DS4Controller* DS4Controller::_instance = nullptr;
@@ -34,7 +35,7 @@ static DS4ClientCB clientCB;
 
 void DS4Controller::begin() {
     _instance = this;
-    Serial.println("DS4: digite 'pair' para escanear e conectar.");
+    term.println("DS4: digite 'pair' para escanear e conectar.");
 }
 
 void DS4Controller::update() {
@@ -52,15 +53,15 @@ void DS4Controller::update() {
 
 void DS4Controller::startPairing() {
     if (_scanning) {
-        Serial.println("DS4: escaneamento ja em andamento.");
+        term.println("DS4: escaneamento ja em andamento.");
         return;
     }
     if (_connected) {
-        Serial.println("DS4: ja conectado.");
+        term.println("DS4: ja conectado.");
         return;
     }
-    Serial.println("DS4: escaneando por \"Wireless Controller\"...");
-    Serial.println("      Pressione PS + Share por 3s no DS4.");
+    term.println("DS4: escaneando por \"Wireless Controller\"...");
+    term.println("      Pressione PS + Share por 3s no DS4.");
     _startScan();
 }
 
@@ -72,7 +73,7 @@ void DS4Controller::disconnect() {
     _paired = false;
     _pairedAddr = NimBLEAddress();
     _client = nullptr;
-    Serial.println("DS4: desconectado e esquecido.");
+    term.println("DS4: desconectado e esquecido.");
 }
 
 String DS4Controller::getAddress() {
@@ -108,7 +109,7 @@ void DS4Controller::_onScanResult(NimBLEAdvertisedDevice* dev) {
     if (!dev->haveName()) return;
     if (dev->getName() != DS4_NAME) return;
 
-    Serial.printf("DS4: encontrado %s [%s]\n",
+    term.printf("DS4: encontrado %s [%s]\n",
                   dev->getName().c_str(), dev->getAddress().toString().c_str());
 
     _stopScan();
@@ -118,26 +119,26 @@ void DS4Controller::_onScanResult(NimBLEAdvertisedDevice* dev) {
     _client->setConnectTimeout(5);
 
     if (!_client->connect(dev)) {
-        Serial.println("DS4: falha ao conectar.");
+        term.println("DS4: falha ao conectar.");
         BLEDevice::deleteClient(_client);
         _client = nullptr;
         return;
     }
-    Serial.println("DS4: conectado!");
+    term.println("DS4: conectado!");
 
     if (!_client->discoverAttributes()) {
-        Serial.println("DS4: falha ao descobrir servicos.");
+        term.println("DS4: falha ao descobrir servicos.");
         _client->disconnect();
         return;
     }
 
     NimBLERemoteService* hidSvc = _client->getService(NimBLEUUID((uint16_t)0x1812));
     if (!hidSvc) {
-        Serial.println("DS4: servico HID nao encontrado.");
+        term.println("DS4: servico HID nao encontrado.");
         _client->disconnect();
         return;
     }
-    Serial.println("DS4: servico HID encontrado.");
+    term.println("DS4: servico HID encontrado.");
 
     std::vector<NimBLERemoteCharacteristic*>* charsPtr = hidSvc->getCharacteristics();
     if (!charsPtr) { _client->disconnect(); return; }
@@ -150,17 +151,17 @@ void DS4Controller::_onScanResult(NimBLEAdvertisedDevice* dev) {
     }
 
     if (!_reportChar) {
-        Serial.println("DS4: caracteristica de notificacao nao encontrada.");
+        term.println("DS4: caracteristica de notificacao nao encontrada.");
         _client->disconnect();
         return;
     }
-    Serial.println("DS4: inscrito em notificacoes de input.");
+    term.println("DS4: inscrito em notificacoes de input.");
 
     if (!_reportChar->subscribe(true, [this](NimBLERemoteCharacteristic* pChar,
                                               uint8_t* data, size_t len, bool isNotify) {
         _parseReport(data, len);
     })) {
-        Serial.println("DS4: falha ao subscrever notificacoes.");
+        term.println("DS4: falha ao subscrever notificacoes.");
         _client->disconnect();
         return;
     }
@@ -169,13 +170,13 @@ void DS4Controller::_onScanResult(NimBLEAdvertisedDevice* dev) {
     _paired = true;
     _disconnectTime = 0;
     _connected = true;
-    Serial.println("DS4: pronto! Controles mapeados.");
+    term.println("DS4: pronto! Controles mapeados.");
 }
 
 void DS4Controller::_onScanEnd() {
     _scanning = false;
     if (!_connected) {
-        Serial.println("DS4: nenhum controle encontrado.");
+        term.println("DS4: nenhum controle encontrado.");
     }
 }
 
@@ -190,7 +191,7 @@ void DS4Controller::_onDisconnect() {
         BLEDevice::deleteClient(_client);
         _client = nullptr;
     }
-    Serial.println("DS4: desconectado. Reconectando em 5s...");
+    term.println("DS4: desconectado. Reconectando em 5s...");
 }
 
 // ========== Report Parsing ==========

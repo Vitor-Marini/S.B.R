@@ -1,4 +1,5 @@
 #include "motor.hpp"
+#include "net.hpp"
 #include "config.hpp"
 #include <driver/ledc.h>
 #include <math.h>
@@ -43,7 +44,7 @@ void MotorManager::begin() {
     _setupChannel(_l);
     _setupChannel(_r);
     _lastUpdateUs = micros();
-    Serial.println("Motores inicializados (LEDC 12-bit).");
+    term.println("Motores inicializados (LEDC 12-bit).");
 }
 
 // Escreve DIR/freq/duty no hardware, só quando mudam.

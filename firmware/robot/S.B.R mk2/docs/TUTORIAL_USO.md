@@ -26,6 +26,7 @@ pio run --target upload
 
 # Gravar sistema de arquivos (dashboard web)
 pio run --target uploadfs
+# ⚠️ uploadfs APAGA o /config.json (ganhos ajustados e a rede WiFi salva). Só use se for usar o dashboard web.
 ```
 
 Após gravar, abra o Monitor Serial:

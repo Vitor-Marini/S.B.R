@@ -28,8 +28,8 @@ void BalanceController::compute() {
     _speed = constrain(_speed, -cfg.maxVelocity, cfg.maxVelocity);
 
     float stepsPerMeter = cfg.motor.stepsPerRev / (PI * cfg.motor.wheelDiameterMm * 0.001f);
-    float steps = _speed * stepsPerMeter;
-    motors.setSpeeds(steps + _turnOffset, steps - _turnOffset);
+    // motor "L" do firmware (GPIO0) é a roda DIREITA do robô: L mais rápido → vira à esquerda
+    motors.setSpeeds((_speed + _turnOffset) * stepsPerMeter, (_speed - _turnOffset) * stepsPerMeter);
 
     cfg.pidOutput = accel;
 }

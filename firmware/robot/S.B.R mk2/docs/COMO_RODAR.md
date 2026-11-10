@@ -56,6 +56,7 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 | `accel` | saída do PD = **controle** (m/s² pedidos à roda) |
 | `err` | **erro** de ângulo: pitch − (setpoint + voff) (°) |
 | `voff` | offset de ângulo pedido pela malha de velocidade (°) |
+| `yrate` | taxa de giro (°/s, + = esquerda) |
 | `state` | estado do robô (tabela abaixo) |
 | `tick` | taxa do loop de controle (deve ficar em 200) |
 | `temp` | temperatura do MPU (°C) |
@@ -74,6 +75,8 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 ## 4. Rodar um teste de equilíbrio
 
 1. **Superfície com grip** (mouse pad, borracha). Na mesa lisa a roda patina e ele cai.
+   **Cabo USB folgado** (volta grande, sem arrastar) e mãos fora: cabo puxando ou mão encostando seguram o robô e escondem o comportamento real (já enganou o diagnóstico).
+   **Não mande `stop` com ele em pé**: os motores param e ele cai. Segure antes.
 2. Ligue a **bateria dos motores** com o robô em IDLE.
 3. Robô com as **rodas no chão**, você segurando por cima, com a mão solta, no ponto de equilíbrio.
    - **Não dê `start` com ele no suporte**: se ele já estiver no ângulo do setpoint, entra em ACTIVE na hora e gira as rodas no ar.
@@ -86,11 +89,29 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 
 ---
 
+## 4b. Controlar pelo PC (teclado)
+
+Com a ponte rodando e o robô em ACTIVE, em outro terminal:
+
+```bash
+python3 tools/teleop.py
+```
+
+Setas/WASD aceleram e viram, **espaço para**, `q` sai. O programa manda `drive <m/s> <°/s>` a 20 Hz.
+Se ele fechar ou travar, o robô para sozinho em 0,5 s (watchdog).
+
+**Qualquer programa pode controlar o robô do mesmo jeito** (câmera, IA, script): abrir TCP `localhost:5555`
+e mandar linhas `drive v w` repetidamente (10–20 Hz). `+v` = frente, `+w` = virar à esquerda.
+A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
+
+---
+
 ## 5. Comandos do terminal
 
 | Comando | O que faz |
 |---------|-----------|
 | `start` / `stop` | liga / desliga o equilíbrio |
+| `drive <m/s> <°/s>` | andar/virar (+ = frente / esquerda). Vale por 0,5 s: repita a 10–20 Hz |
 | `state` | estado atual |
 | `status` | config completa + telemetria |
 | `angle` | pitch, ângulo do acelerômetro, gyro integrado, taxa do loop (deve ser 200 Hz) |
@@ -107,10 +128,12 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 |-------|-------|------------------|
 | `kp` | 0.35 | (m/s²) por grau. Força para voltar ao setpoint. Mínimo físico ≈ 0,17 |
 | `kd` | 0.03 | (m/s²) por °/s. Amortece. **Baixar piorou** (testado) |
-| `sp` | 5.0 | setpoint (°): ângulo do ponto de equilíbrio |
-| `vmax` | 0.5 | limite de velocidade da roda (m/s) |
+| `sp` | 6.8 | setpoint (°): ângulo do ponto de equilíbrio |
+| `vmax` | 0.8 | limite de velocidade da roda (m/s) |
 | `vkp` | 4 | malha de velocidade: ° de inclinação por m/s de erro. Amortece o "vai e volta" depois de um empurrão |
-| `vki` | 0 | integral da velocidade: faz voltar ao lugar. Comece em 0 |
+| `vki` | 1 | integral da velocidade: tira a deriva e faz voltar ao lugar |
+| `ykp` | 0.001 | curva: (m/s de diferença entre rodas) por °/s de erro |
+| `yki` | 0.01 | integral da curva |
 | `alpha` | 0.995 | filtro: quanto confia no gyro (0,98 = mais acelerômetro) |
 | `spr` | 200 | passos por volta: 200 em full step, **3200 em 1/16** |
 | `accel` | 25000 | trava de aceleração do motor (passos/s²). **400000 em 1/16** |

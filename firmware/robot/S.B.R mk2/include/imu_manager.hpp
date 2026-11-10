@@ -19,7 +19,9 @@ public:
     float getYawRate() { return _yawRate; }
     float getAccAngle() { return _accAngle; }
     float getGyroAngle() { return _gyroAngle; }  // diagnóstico: só gyro integrado, zera no cal
-    float getTemp() { return _temp; }  // °C do sensor interno do MPU
+    float getTemp() { return _temp; }
+    bool healthy() { return _failStreak < 10; }   // 10 leituras seguidas = 50 ms sem IMU
+    uint32_t getFailCount() { return _failCount; }  // °C do sensor interno do MPU
 
     float getAccX() { return _ax; }
     float getAccY() { return _ay; }
@@ -43,6 +45,10 @@ private:
     float _yawRate = 0.0f;
     float _temp = 0.0f;
 
+    uint8_t _failStreak = 0;
+    uint32_t _failCount = 0;
+
+    bool _readRaw(float out[7]);
     void _sample();
 };
 
