@@ -1,4 +1,9 @@
-# Plano de Refatoração — S.B.R mk2
+# Diário de desenvolvimento — S.B.R
+
+> Diagnóstico e histórico dos testes, em ordem. Começou como o plano de refatoração do firmware mk2
+> (2026-10-31). Caminhos antigos (`firmware/robot/S.B.R mk2/...`) hoje são `firmware/`, `tools/` e `docs/`.
+
+## Plano de refatoração (original)
 
 Diagnóstico feito em 2026-10-31 lendo o código + testes no robô via serial (`/dev/ttyACM0`).
 Não é reescrita: estado/config/CLI servem. É **consertar e enxugar** a cadeia IMU → PID → motor.

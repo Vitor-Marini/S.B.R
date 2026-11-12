@@ -17,7 +17,7 @@ case "${1:-wifi}" in
 esac
 
 if ! pgrep -x plotjuggler >/dev/null; then
-    # o lançador do snap quebra caminhos com espaço ("S.B.R mk2"): copia o layout pra pasta do snap
+    # cópia na pasta do snap: o lançador do PlotJuggler quebra caminhos com espaço
     LAYOUT="$HOME/snap/plotjuggler/common/sbr_layout.xml"
     mkdir -p "$(dirname "$LAYOUT")"
     cp sbr_layout.xml "$LAYOUT"

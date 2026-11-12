@@ -12,7 +12,7 @@
 CLI cli;
 
 void CLI::begin() {
-    term.println("\nS.B.R mk2 — Terminal Interativo");
+    term.println("\nS.B.R — Terminal Interativo");
     term.println("Digite 'help' para comandos disponíveis.");
     _printPrompt();
 }

@@ -20,7 +20,7 @@ static uint32_t lastDs4Handle = 0;
 void setup() {
     Serial.begin(115200);
     delay(500);
-    term.println("\n\n=== S.B.R mk2 ===");
+    term.println("\n\n=== S.B.R ===");
 
     cfg.begin();
     net.begin();

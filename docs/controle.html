@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>S.B.R mk2 — Entendendo o controle</title>
+<title>S.B.R — Entendendo o controle</title>
 <style>
   :root {
     --bg: #fbfaf7; --fg: #1f2328; --muted: #5d6470; --line: #d9d6cf; --card: #ffffff;
@@ -67,7 +67,7 @@
 <body>
 <main>
 
-<h1>Entendendo o controle do S.B.R mk2</h1>
+<h1>Entendendo o controle do S.B.R</h1>
 <p class="lede">Teoria de controle explicada pelo seu próprio robô: o que é cada malha, por que o código faz o que faz, por que
 falamos em m/s e m/s², e o que cada bug que encontramos ensina. No meio tem um simulador onde você mexe nos ganhos e vê o efeito.</p>
 
@@ -562,13 +562,13 @@ várias vezes. Depois um pouco de <code>vki</code> pra tirar a deriva lenta.</li
 <h2 id="mapa">18. Mapa conceito → código</h2>
 <table>
 <tr><th>Conceito</th><th>Arquivo / função</th></tr>
-<tr><td>Tick fixo de 200 Hz</td><td><code>src/main.cpp</code>, <code>loop()</code></td></tr>
-<tr><td>Máquina de estados, failsafe</td><td><code>src/supervisor.cpp</code></td></tr>
-<tr><td>Filtro complementar, leitura do MPU</td><td><code>src/imu_manager.cpp</code>, <code>read()</code> / <code>_readRaw()</code></td></tr>
-<tr><td>Malha de equilíbrio (PD → aceleração → ∫), feedforward</td><td><code>src/balance.cpp</code>, <code>compute()</code></td></tr>
-<tr><td>Malha de velocidade, curva, rampa, watchdog</td><td><code>src/velocity.cpp</code>, <code>update()</code></td></tr>
-<tr><td>Conversão m/s → pulsos, rampa do motor (malha aberta)</td><td><code>src/motor.cpp</code></td></tr>
-<tr><td>Ganhos e limites (unidades nos comentários)</td><td><code>include/config.hpp</code></td></tr>
+<tr><td>Tick fixo de 200 Hz</td><td><code>firmware/src/main.cpp</code>, <code>loop()</code></td></tr>
+<tr><td>Máquina de estados, failsafe</td><td><code>firmware/src/supervisor.cpp</code></td></tr>
+<tr><td>Filtro complementar, leitura do MPU</td><td><code>firmware/src/imu_manager.cpp</code>, <code>read()</code> / <code>_readRaw()</code></td></tr>
+<tr><td>Malha de equilíbrio (PD → aceleração → ∫), feedforward</td><td><code>firmware/src/balance.cpp</code>, <code>compute()</code></td></tr>
+<tr><td>Malha de velocidade, curva, rampa, watchdog</td><td><code>firmware/src/velocity.cpp</code>, <code>update()</code></td></tr>
+<tr><td>Conversão m/s → pulsos, rampa do motor (malha aberta)</td><td><code>firmware/src/motor.cpp</code></td></tr>
+<tr><td>Ganhos e limites (unidades nos comentários)</td><td><code>firmware/include/config.hpp</code></td></tr>
 </table>
 
 <!-- ================================================================== -->

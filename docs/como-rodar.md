@@ -1,23 +1,24 @@
-# Como rodar o S.B.R mk2 (bring-up, Fase 3)
+# Como rodar o S.B.R
 
-Guia curto do dia a dia: gravar, abrir a ponte, ver gráficos, dar start e ajustar.
-Nesta fase **WiFi, BLE e DS4 estão desligados** (`ENABLE_RADIOS 0` em `src/main.cpp`), então tudo é pela USB.
-O plano e o histórico dos testes estão em `todos/plano_refatoracao.md`.
+Guia do dia a dia: gravar, abrir a ponte, ver gráficos, dar start e ajustar.
+O robô fala pela USB **ou** pelo WiFi (UDP, mesmo protocolo). Hardware em [hardware.md](hardware.md);
+o histórico de diagnóstico em [diario.md](diario.md); a teoria de controle em [controle.html](controle.html).
 
-Todos os comandos abaixo rodam a partir desta pasta:
+Todos os comandos abaixo rodam a partir da **raiz do repositório**:
 
 ```bash
-cd "/home/vitorsynkar/personal/dev/S.B.R/firmware/robot/S.B.R mk2"
+cd ~/personal/dev/S.B.R
 ```
 
 ---
 
 ## 1. Gravar o firmware
 
-A porta USB só pode ter **um dono**: feche a ponte (Ctrl+C) antes de gravar.
+A porta USB só pode ter **um dono**: feche a ponte em modo USB (Ctrl+C) antes de gravar.
+A ponte em modo WiFi (`udp:`) não usa a USB e pode ficar aberta (a ESP reinicia: deixe o robô parado).
 
 ```bash
-~/.platformio/penv/bin/pio run -t upload --upload-port /dev/ttyACM0
+~/.platformio/penv/bin/pio run -d firmware -t upload
 ```
 
 A configuração (ganhos, setpoint etc.) fica em `/config.json` na flash e **sobrevive** à gravação.
@@ -61,7 +62,7 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 
 1. Instalar uma vez: `sudo snap install plotjuggler`
 2. Abrir `plotjuggler` → **Streaming** → **UDP Server** → porta **9870**, protocolo **JSON** → **Start**.
-3. No terminal da ponte, digite `stream` (liga/desliga o envio a 50 Hz).
+3. No terminal da ponte, digite `stream on` (envio a 50 Hz; `stream off` desliga). O `tools/sbr.sh` já faz isso.
 4. Arraste as curvas da lista da esquerda para o gráfico. Botão direito → *Split* cria mais gráficos.
 
 | Curva | O que é |
