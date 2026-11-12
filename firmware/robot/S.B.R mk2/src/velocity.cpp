@@ -39,7 +39,9 @@ void VelocityController::update() {
     float maxStep = TARGET_ACCEL * dt;
     _rampedTarget += constrain(_targetVelocity - _rampedTarget, -maxStep, maxStep);
     float velError = _rampedTarget - _estimatedVelocity;
-    _velIntegral += velError * dt;
+    // integral só parado: corrige deriva; andando, quem leva é o feedforward + P
+    // (senão ele "cobra" a distância não percorrida e o robô dá tranco ao parar)
+    if (_rampedTarget == 0.0f) _velIntegral += velError * dt;
     _velIntegral = constrain(_velIntegral, -0.5f, 0.5f);
     _angleOffset = cfg.velocityPid.kp * velError + cfg.velocityPid.ki * _velIntegral;
     _angleOffset = constrain(_angleOffset, -5.0f, 5.0f);

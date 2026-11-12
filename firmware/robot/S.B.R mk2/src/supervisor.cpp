@@ -103,6 +103,14 @@ void Supervisor::_runIdle() {
     motors.update();  // rampa do comando 'motor' do CLI
     imu.read();
     cfg.pitchAngle = imu.getPitch();
+    if (!imu.healthy()) _restartImu();
+}
+
+// MPU sem resposta ou reiniciado (queda de energia/mau contato): reconfigura e recalibra
+void Supervisor::_restartImu() {
+    term.println("IMU sem resposta ou reiniciado: reconfigurando (deixe o robô parado)...");
+    motors.stop();
+    _setState(STATE_INIT);
 }
 
 // Motores parados até o robô ficar perto do setpoint por 300 ms; aí liga o equilíbrio.
@@ -149,6 +157,7 @@ void Supervisor::_runActive() {
     velCtrl.update();
     balance.setAngleOffset(velCtrl.getAngleOffset());
     balance.setTurnOffset(velCtrl.getTurnOffset());
+    balance.setSpeedFF(velCtrl.getRampedTarget());
     balance.compute();
 }
 
@@ -159,6 +168,7 @@ void Supervisor::_runMoving() {
 void Supervisor::_runFault() {
     motors.stop();
     imu.read();  // sem isso o ângulo congela e o FAULT nunca sai
+    if (!imu.healthy()) { _restartImu(); return; }
 
     float angle = imu.getPitch();
     if (fabsf(angle) < 15.0f) {

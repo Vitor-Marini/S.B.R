@@ -7,10 +7,11 @@
 - UDP localhost:9870: linhas '>nome:valor' (comando `stream`) viram JSON
   para o PlotJuggler (Streaming → UDP Server, porta 9870, protocolo JSON).
 
-Uso: ~/.platformio/penv/bin/python tools/serial_bridge.py [/dev/ttyACM0]
+Uso: ~/.platformio/penv/bin/python tools/serial_bridge.py [auto | /dev/ttyACMx]
      ~/.platformio/penv/bin/python tools/serial_bridge.py udp:sbr.local   (sem cabo, via WiFi)
 Reconecta sozinho se o cabo cair.
 """
+import glob
 import json
 import socket
 import sys
@@ -19,10 +20,30 @@ import time
 
 import serial
 
-PORT = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyACM0"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+PORT = ARGS[0] if ARGS else "auto"
+AUTO_STREAM = "--stream" in sys.argv  # liga o stream do robô se ele estiver desligado
+
+
+def resolve_port():
+    """auto: acha a ESP pelo nome fixo (a USB pode voltar como ttyACM1 depois de cair)."""
+    if PORT != "auto":
+        return PORT
+    found = sorted(glob.glob("/dev/serial/by-id/usb-Espressif*")) or sorted(glob.glob("/dev/ttyACM*"))
+    if not found:
+        raise serial.SerialException("robô não encontrado na USB")
+    return found[0]
+
+
 TCP_PORT, UDP_PORT = 5555, 9870
+last_stream = 0.0  # hora da última linha '>nome:valor' recebida
+frame = {}         # quadro do stream sendo montado
 
 
+def flush_frame():
+    if frame:
+        udp.sendto(json.dumps(frame).encode(), ("127.0.0.1", UDP_PORT))
+        frame.clear()
 
 class UdpLink:
     """Robô via WiFi (UDP 5555) com a mesma interface read/write da serial."""
@@ -91,6 +112,15 @@ def _selftest():
     assert time.time() - t0 < 5, "ponte travou"
     assert slow_a in clients, "cliente que só escreve foi derrubado"
     assert good_a in clients and got > 1_000_000, "cliente bom parou de receber"
+    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx.bind(("127.0.0.1", 0))
+    global UDP_PORT
+    UDP_PORT = rx.getsockname()[1]
+    frame.clear()  # sobra do teste anterior (linhas ">x:")
+    for l in (b">pitch:6.5\n", b"sbr> >speed:0.1\n", b">temp:30\n"):
+        handle_line(l)
+    rx.settimeout(1)
+    assert json.loads(rx.recv(4096)) == {"pitch": 6.5, "speed": 0.1, "temp": 30.0}, "quadro agrupado"
     print("selftest ok")
 
 
@@ -127,11 +157,20 @@ def handle_line(raw: bytes):
     while line.startswith("sbr> "):  # prompt do CLI grudado na linha
         line = line[5:]
     if line.startswith(">") and ":" in line:
+        global last_stream
+        last_stream = time.time()
         name, _, value = line[1:].partition(":")
         try:
-            udp.sendto(json.dumps({name: float(value)}).encode(), ("127.0.0.1", UDP_PORT))
+            v = float(value)
         except ValueError:
-            pass
+            return
+        # um JSON por quadro (todos os sinais juntos): o PlotJuggler se perde com um pacote por valor.
+        # O quadro fecha em `temp` (último campo do stream) ou quando um nome se repete.
+        if name in frame:
+            flush_frame()
+        frame[name] = v
+        if name == "temp":
+            flush_frame()
         return  # não polui o terminal com o stream
     print(line, flush=True)
 
@@ -146,10 +185,17 @@ def main():
             if PORT.startswith("udp:"):
                 ser = UdpLink(PORT[4:])
             else:
-                ser = serial.Serial(PORT, 115200, timeout=0.1)
-            print(f"[conectado em {PORT}]", flush=True)
+                ser = serial.Serial(resolve_port(), 115200, timeout=0.1)
+            print(f"[conectado em {getattr(ser, 'port', PORT)}]", flush=True)
             buf = b""
+            connected_at = time.time()
+            asked = False
             while True:
+                # firmware antigo só tem `stream` liga/desliga: só pede se nada chegou desde a conexão
+                if AUTO_STREAM and not asked and time.time() - connected_at > 1.5:
+                    asked = True
+                    if last_stream < connected_at:
+                        send_serial(b"stream on\n")
                 buf += ser.read(4096)
                 *lines, buf = buf.split(b"\n")
                 for l in lines:
@@ -162,7 +208,7 @@ def main():
 
 
 if __name__ == "__main__":
-    if PORT == "--selftest":
+    if "--selftest" in sys.argv:
         _selftest()
         sys.exit()
     try:

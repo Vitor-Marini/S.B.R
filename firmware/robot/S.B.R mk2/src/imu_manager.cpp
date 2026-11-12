@@ -34,10 +34,14 @@ bool IMUManager::_readRaw(float out[7]) {
         return false;
     }
     int16_t raw[7];
+    bool allZero = true;
     for (int i = 0; i < 7; i++) {
         int hi = Wire.read();
         raw[i] = (int16_t)((hi << 8) | Wire.read());
+        if (raw[i]) allZero = false;
     }
+    // MPU que perdeu energia acorda em sleep e responde só zeros: é falha, não leitura
+    if (allZero) return false;
     for (int i = 0; i < 3; i++) out[i] = raw[i] * (9.80665f / 4096.0f);
     out[3] = raw[3] / 340.0f + 36.53f;
     for (int i = 4; i < 7; i++) out[i] = radians(raw[i] / 65.5f);

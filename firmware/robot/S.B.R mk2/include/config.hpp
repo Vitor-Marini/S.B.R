@@ -10,9 +10,9 @@ struct PIDGains {
 };
 
 struct MotorParams {
-    float stepsPerRev = 200.0f;
+    float stepsPerRev = 3200.0f;          // NEMA17 200 passos × 1/16 (M2 em nível alto)
     float wheelDiameterMm = 74.0f;
-    float maxAccelStepsS2 = 25000.0f;
+    float maxAccelStepsS2 = 400000.0f;    // só trava de segurança; quem acelera é o controle
     bool leftReversed = false;
     bool rightReversed = false;
 };

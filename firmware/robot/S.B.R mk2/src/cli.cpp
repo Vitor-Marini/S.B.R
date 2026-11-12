@@ -21,10 +21,11 @@ void CLI::update() {
     // formato Teleplot (">nome:valor"), 50 Hz
     if (_streaming && millis() - _lastStream >= 20) {
         _lastStream = millis();
-        term.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>yrate:%.1f\n>state:%d\n>tick:%d\n>temp:%.1f\n",
+        term.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>vtgt:%.3f\n>yrate:%.1f\n>wtgt:%.0f\n>state:%d\n>tick:%d\n>temp:%.1f\n",
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw(), balance.getSpeed(), cfg.pidOutput,
-                      balance.getAngleError(), velCtrl.getAngleOffset(), cfg.yawRate,
+                      balance.getAngleError(), velCtrl.getAngleOffset(), velCtrl.getTarget(),
+                      cfg.yawRate, velCtrl.getTurnRate(),
                       cfg.robotState, cfg.tickHz, imu.getTemp());
     }
     while (Serial.available()) {
@@ -142,13 +143,18 @@ void CLI::_processLine(const String& line) {
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw());
         term.printf("Tick: %d Hz  pior run: %lu us\n", cfg.tickHz, (unsigned long)cfg.tickMaxUs);
+        term.printf("Alvo: %.2f m/s  %.0f °/s  |  real: %.2f m/s  %.0f °/s\n",
+                      velCtrl.getTarget(), velCtrl.getTurnRate(), balance.getSpeed(), cfg.yawRate);
     } else if (command == "raw") {
         term.printf("acc m/s2: %6.2f %6.2f %6.2f | gyro deg/s: %7.2f %7.2f %7.2f\n",
                       imu.getAccX(), imu.getAccY(), imu.getAccZ(),
                       degrees(imu.getGyroX()), degrees(imu.getGyroY()), degrees(imu.getGyroZ()));
         term.printf("temp: %.1f C  falhas I2C: %lu\n", imu.getTemp(), (unsigned long)imu.getFailCount());
     } else if (command == "stream") {
-        _streaming = !_streaming;
+        // stream on | off (sem argumento alterna); "on" explícito é seguro de repetir
+        if (args == "on") _streaming = true;
+        else if (args == "off") _streaming = false;
+        else _streaming = !_streaming;
         if (!_streaming) term.println("stream off");
     } else if (command == "wifi") {
         // wifi <rede> <senha> → salva e conecta; wifi → status. (rede sem espaços)
@@ -169,6 +175,14 @@ void CLI::_processLine(const String& line) {
             Wire.endTransmission(false);
             Wire.requestFrom(0x68, 1);
             term.printf("reg 0x%02X = 0x%02X\n", r, Wire.available() ? Wire.read() : 0xFF);
+        }
+    } else if (command == "motors") {
+        // motors <L> <R> passos/s — teste remoto (gamepad). Só em IDLE; vale 0,5 s: repetir a 10–20 Hz.
+        // L/R são os motores do firmware: "L" (GPIO0) é a roda DIREITA do robô.
+        if (supervisor.getState() == STATE_IDLE) {
+            int sp = args.indexOf(' ');
+            motors.setSpeedsTimed(args.substring(0, sp > 0 ? sp : args.length()).toFloat(),
+                                  sp > 0 ? args.substring(sp + 1).toFloat() : 0.0f, 500);
         }
     } else if (command == "drive") {
         // drive <m/s> <°/s>  — API única de movimento (PC, câmera, IA...). Sem resposta, para
@@ -212,9 +226,10 @@ void CLI::_printHelp() {
     term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|abx|abz|alpha> <val> → Ajustar PID/motor");
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
+    term.println("  motors <L> <R>    → Teste remoto dos motores (passos/s), só IDLE, vale 0,5 s");
     term.println("  angle             → Ler ângulo atual");
     term.println("  raw               → Acelerômetro, gyro e temperatura");
-    term.println("  stream            → Liga/desliga gráficos (Teleplot) a 50 Hz");
+    term.println("  stream [on|off]   → Gráficos (PlotJuggler/Teleplot) a 50 Hz");
     term.println("  save              → Salvar config na flash");
     term.println("  load              → Carregar config da flash");
     term.println("  reset             → Resetar odometria e integrais");

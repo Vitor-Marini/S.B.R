@@ -118,3 +118,21 @@ Confirmado OK: os dois motores giram suave a 500 passos/s; com o mesmo comando, 
 ## O que sai do código
 
 `MahonyFilter`, `STATE_MOVING`, heading-hold duplicado em `balance.cpp`, cópia do PD em `_runStarting`, `_rampMotor` em módulo, `ComplementaryFilter` genérico (vira 3 linhas no IMU).
+
+---
+
+## 2026-11-10 — microstepping 1/16 e o "não anda pra frente"
+
+- 1/16 ligado (M2 em nível alto): motor suave e silencioso; parado o tremor caiu de 1,5° → **0,08°**. `spr` 3200, `accel` 400000 (padrões do código atualizados).
+- `drive` continua sem andar: com `vki` 5 a malha de velocidade pediu +3°, o corpo inclinou +3° (gyroint confirma) e a velocidade ficou ~0, sem cair. Com rodas travadas (IDLE) solto na mesa ele **cai em <1 s** → centro de massa acima do eixo (hipótese de CM baixo descartada).
+- **Causa mais provável: MPU mal fixado** (o usuário confirmou que a placa oscila). Se a placa gira em relação ao chassi, o PD equilibra o ângulo da placa, não o do robô: explica o setpoint mudando entre sessões (5,0→6,8), inclinações "seguradas" sem andar, e o reset por mau contato no VCC/GND.
+- Próximo: fixar o MPU rígido (parafuso/espaçador ou cola dura, fios com alívio de tensão, longe dos drivers), `cal` parado, remedir `sp`, repetir `drive 0.1`. Só depois mexer em vki/clamp do integral.
+- Ponte: modo `auto` acha a ESP por `/dev/serial/by-id` (a USB voltou como ttyACM1 e um `stop` se perdeu).
+
+### 2026-11-10 (tarde) — por que não anda pra frente/trás
+
+- Feedforward de velocidade (roda = equilíbrio + alvo) + integral congelado ao andar: implementado. Resultado: o equilíbrio cancela o feedforward e o robô fica parado 0,5–2° inclinado.
+- Roda travada (IDLE) cai rápido **na mesa e no mouse pad** → não há "apoio" do pneu (rodas de PLA). Hipótese do pneu descartada.
+- Teste de rigidez (chassi seguro): placa do MPU flexiona até ~0,8° sob o dedo — pouco. **O chassi deforma** (confirmado pelo usuário): o corpo/IMU inclina sem o centro de massa sair de cima do eixo → inclinar não gera aceleração, então nem a malha de velocidade nem o feedforward fazem andar.
+- Bloqueio de hardware: chassi rígido (bateria, motores e MPU numa estrutura que não flexione). Depois: `cal` quente, remedir `sp`, `drive 0.1`. Peso no topo é opcional (deixa o pêndulo mais lento e tolerante).
+- Gyro deriva ~0,14°/s quando o MPU esquenta (33 → 46 °C, perto dos drivers): recalibrar quente ou afastar.

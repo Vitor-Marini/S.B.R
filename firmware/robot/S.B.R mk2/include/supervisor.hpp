@@ -40,6 +40,7 @@ private:
     void _runActive();
     void _runMoving();
     void _runFault();
+    void _restartImu();
 };
 
 extern Supervisor supervisor;

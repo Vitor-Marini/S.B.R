@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S.B.R mk2 — Entendendo o controle</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1f2328; --muted: #5d6470; --line: #d9d6cf; --card: #ffffff;
+    --accent: #2f6fb3; --accent2: #c2572b; --ok: #2e8540; --warn: #b8860b; --code: #f2f0eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --fg: #e6e6e6; --muted: #a0a6b0; --line: #333840; --card: #1e2126;
+            --accent: #6aa5e6; --accent2: #e88a5e; --ok: #5cbf73; --warn: #e0b640; --code: #262a31; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; margin: 20px 0 36px; }
+  nav.toc ol { margin: 6px 0 0; padding-left: 20px; columns: 2; column-gap: 28px; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  h1 { font-size: 2em; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 1.45em; margin: 56px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.12em; margin: 28px 0 8px; }
+  p.lede { color: var(--muted); font-size: 1.08em; margin-top: 0; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+  pre { background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: .86em; line-height: 1.45; }
+  .box { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--card); border-radius: 8px; padding: 12px 16px; margin: 18px 0; }
+  .box.warn { border-left-color: var(--warn); }
+  .box.ok { border-left-color: var(--ok); }
+  .box.lesson { border-left-color: var(--accent2); }
+  .box b.t { display: block; margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: .93em; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  figure { margin: 20px 0; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--muted); font-size: .9em; margin-top: 6px; text-align: center; }
+  svg text { font-family: system-ui, sans-serif; fill: var(--fg); }
+  svg .blk { fill: var(--card); stroke: var(--fg); stroke-width: 1.4; }
+  svg .blk2 { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+  svg .blk3 { fill: var(--card); stroke: var(--accent2); stroke-width: 2; }
+  svg .arr { stroke: var(--fg); stroke-width: 1.6; fill: none; marker-end: url(#a); }
+  svg .arrA { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#aA); }
+  svg .arrB { stroke: var(--accent2); stroke-width: 2; fill: none; marker-end: url(#aB); }
+  svg .dash { stroke-dasharray: 5 4; }
+  svg .small { font-size: 12px; fill: var(--muted); }
+  svg .sum { fill: var(--card); stroke: var(--fg); stroke-width: 1.4; }
+  .math { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; font-size: 1.08em; }
+  .center { text-align: center; }
+  /* simulador */
+  .sim { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 18px 0; }
+  .sim canvas { width: 100%; display: block; background: var(--bg); border-radius: 6px; border: 1px solid var(--line); }
+  .ctrls { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px 18px; margin: 14px 0 8px; }
+  .ctrls label { font-size: .9em; display: flex; flex-direction: column; }
+  .ctrls label span { display: flex; justify-content: space-between; }
+  .ctrls output { font-variant-numeric: tabular-nums; color: var(--accent); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .btns button, .btns select { font: inherit; font-size: .9em; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+  .btns button:hover { border-color: var(--accent); }
+  .status { font-size: .92em; margin-top: 8px; color: var(--muted); }
+  .status b { color: var(--fg); }
+  .legend span { display: inline-block; margin-right: 14px; font-size: .85em; }
+  .legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 5px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Entendendo o controle do S.B.R mk2</h1>
+<p class="lede">Teoria de controle explicada pelo seu próprio robô: o que é cada malha, por que o código faz o que faz, por que
+falamos em m/s e m/s², e o que cada bug que encontramos ensina. No meio tem um simulador onde você mexe nos ganhos e vê o efeito.</p>
+
+<nav class="toc" aria-label="Sumário">
+<b>Sumário</b>
+<ol>
+  <li><a href="#problema">O problema: equilibrar um pêndulo invertido</a></li>
+  <li><a href="#vocab">Vocabulário: planta, sensor, atuador, erro</a></li>
+  <li><a href="#malhas">Malha aberta × malha fechada</a></li>
+  <li><a href="#robo">O robô como sistema de controle</a></li>
+  <li><a href="#quantas">Quantas malhas o robô tem?</a></li>
+  <li><a href="#pid">PID: P, I e D sem mistério</a></li>
+  <li><a href="#unidades">Por que m/s e m/s² (e não "% de motor")</a></li>
+  <li><a href="#integrar">Por que o PD vira aceleração e é integrado</a></li>
+  <li><a href="#cascata">A malha de velocidade (cascata)</a></li>
+  <li><a href="#curva">A malha de curva</a></li>
+  <li><a href="#filtro">O sensor por trás: filtro complementar</a></li>
+  <li><a href="#tempo">Tempo real: por que 200 Hz fixos</a></li>
+  <li><a href="#estab">Estabilidade, atraso e oscilação</a></li>
+  <li><a href="#sim">Simulador interativo</a></li>
+  <li><a href="#limites">Saturação, anti-windup, rampa e watchdog</a></li>
+  <li><a href="#licoes">O que cada bug do projeto ensina</a></li>
+  <li><a href="#sintonia">Como sintonizar</a></li>
+  <li><a href="#mapa">Mapa conceito → código</a></li>
+  <li><a href="#glossario">Glossário</a></li>
+</ol>
+</nav>
+
+<!-- marcadores de seta reutilizados por todos os SVGs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="fill:var(--fg)"/></marker>
+    <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
+    <marker id="aB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent2)"/></marker>
+  </defs>
+</svg>
+
+<!-- ================================================================== -->
+<h2 id="problema">1. O problema: equilibrar um pêndulo invertido</h2>
+
+<p>Um robô de duas rodas é um <b>pêndulo invertido</b>: o peso fica acima do eixo das rodas. É como equilibrar um cabo de
+vassoura na palma da mão. Parado, ele <b>cai sozinho</b>: qualquer inclinação mínima cresce, porque a gravidade puxa o
+peso para o lado em que ele já está inclinado. Isso é um sistema <b>instável</b>, e nenhuma "posição de repouso" segura
+ele sem ajuda. Você viu isso no teste da roda travada: soltou, e ele caiu em menos de meio segundo.</p>
+
+<p>Sua mão resolve o problema da vassoura <b>movendo a base para baixo do peso</b>. O robô faz o mesmo com as rodas.
+Se ele inclina para a frente, as rodas aceleram para a frente e "voltam para baixo" do peso.</p>
+
+<figure>
+<svg viewBox="0 0 720 250" role="img" aria-label="Pêndulo invertido: corpo inclinado de theta, gravidade puxa para baixo, roda acelera para frente">
+  <line x1="40" y1="215" x2="680" y2="215" stroke="currentColor" style="stroke:var(--muted)" stroke-width="2"/>
+  <!-- robô parado inclinado -->
+  <circle cx="170" cy="190" r="24" class="blk"/>
+  <line x1="170" y1="190" x2="230" y2="60" stroke-width="10" stroke-linecap="round" style="stroke:var(--accent)"/>
+  <circle cx="230" cy="60" r="14" style="fill:var(--accent)"/>
+  <line x1="170" y1="190" x2="170" y2="45" class="dash" style="stroke:var(--muted)" stroke-width="1.4"/>
+  <path d="M170,120 A70,70 0 0,1 198,129" fill="none" style="stroke:var(--fg)" stroke-width="1.4"/>
+  <text x="186" y="112" font-size="16">θ</text>
+  <line x1="230" y1="74" x2="230" y2="140" class="arr"/>
+  <text x="238" y="130" font-size="13">gravidade</text>
+  <text x="70" y="245" class="small">rodas paradas → θ cresce → cai</text>
+  <!-- robô corrigindo -->
+  <circle cx="500" cy="190" r="24" class="blk"/>
+  <line x1="500" y1="190" x2="560" y2="60" stroke-width="10" stroke-linecap="round" style="stroke:var(--accent)"/>
+  <circle cx="560" cy="60" r="14" style="fill:var(--accent)"/>
+  <line x1="530" y1="190" x2="610" y2="190" class="arrB"/>
+  <text x="560" y="182" font-size="13" style="fill:var(--accent2)">roda acelera p/ frente</text>
+  <text x="420" y="245" class="small">aceleração a ≈ g·tan θ mantém θ; mais que isso, θ diminui</text>
+</svg>
+<figcaption>Para segurar uma inclinação θ, a base precisa acelerar <span class="math">a = g·tan θ</span>. Para <b>reduzir</b> θ, um pouco mais.</figcaption>
+</figure>
+
+<div class="box"><b class="t">A frase-chave do projeto</b>
+O que endireita o robô é a <b>aceleração</b> da roda, não a velocidade. Guarde isso: ela explica
+por que o código faz a conta do jeito que faz (seção 8) e por que tudo está em m/s² e m/s (seção 7).</div>
+
+<!-- ================================================================== -->
+<h2 id="vocab">2. Vocabulário: planta, sensor, atuador, erro</h2>
+
+<table>
+<tr><th>Termo</th><th>O que é</th><th>No S.B.R</th></tr>
+<tr><td><b>Planta</b></td><td>O sistema físico que queremos controlar.</td><td>O robô: corpo + rodas + gravidade.</td></tr>
+<tr><td><b>Saída</b> (variável controlada)</td><td>O que queremos que fique de um jeito.</td><td>O ângulo de inclinação (pitch).</td></tr>
+<tr><td><b>Referência</b> (setpoint)</td><td>O valor desejado da saída.</td><td><code>sp</code> = 6,8°: o ângulo em que o peso fica em cima do eixo.</td></tr>
+<tr><td><b>Sensor</b></td><td>Mede a saída.</td><td>MPU6050 (acelerômetro + giroscópio) + filtro complementar.</td></tr>
+<tr><td><b>Erro</b></td><td>Diferença entre o desejado e o medido.</td><td><code>err = pitch − (sp + voff)</code></td></tr>
+<tr><td><b>Controlador</b></td><td>A regra que transforma erro em comando.</td><td>O código em <code>balance.cpp</code>, rodando 200×/s na ESP32.</td></tr>
+<tr><td><b>Atuador</b></td><td>Quem age na planta.</td><td>Drivers DRV8825 + motores de passo.</td></tr>
+<tr><td><b>Perturbação</b></td><td>O que empurra a saída sem ser o controle.</td><td>Empurrão, cabo puxando, piso irregular, chassi flexionando.</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 id="malhas">3. Malha aberta × malha fechada</h2>
+
+<p><b>Malha aberta</b>: o controlador manda o comando e <b>não confere o resultado</b>. Exemplo: uma torradeira com timer.
+Ela liga por 2 minutos, esteja o pão claro ou queimado.</p>
+<p><b>Malha fechada</b> (realimentação, <i>feedback</i>): o controlador <b>mede a saída</b>, compara com o desejado e corrige
+continuamente. Exemplo: o termostato do ar-condicionado.</p>
+
+<figure>
+<svg viewBox="0 0 720 260" role="img" aria-label="Diagrama de malha aberta e malha fechada">
+  <text x="20" y="28" font-weight="600">Malha aberta</text>
+  <text x="20" y="72" font-size="13">referência</text>
+  <line x1="95" y1="68" x2="160" y2="68" class="arr"/>
+  <rect x="160" y="45" width="130" height="46" rx="6" class="blk"/><text x="225" y="73" text-anchor="middle">controlador</text>
+  <line x1="290" y1="68" x2="350" y2="68" class="arr"/>
+  <rect x="350" y="45" width="110" height="46" rx="6" class="blk"/><text x="405" y="73" text-anchor="middle">atuador</text>
+  <line x1="460" y1="68" x2="520" y2="68" class="arr"/>
+  <rect x="520" y="45" width="100" height="46" rx="6" class="blk"/><text x="570" y="73" text-anchor="middle">planta</text>
+  <line x1="620" y1="68" x2="690" y2="68" class="arr"/><text x="640" y="60" font-size="13">saída</text>
+
+  <text x="20" y="140" font-weight="600">Malha fechada</text>
+  <text x="20" y="190" font-size="13">ref.</text>
+  <line x1="55" y1="186" x2="118" y2="186" class="arr"/>
+  <circle cx="132" cy="186" r="14" class="sum"/><text x="132" y="191" text-anchor="middle" font-size="14">Σ</text>
+  <text x="108" y="178" font-size="13">+</text><text x="138" y="214" font-size="15">−</text>
+  <line x1="146" y1="186" x2="190" y2="186" class="arr"/><text x="152" y="178" font-size="12">erro</text>
+  <rect x="190" y="163" width="120" height="46" rx="6" class="blk2"/><text x="250" y="191" text-anchor="middle">controlador</text>
+  <line x1="310" y1="186" x2="360" y2="186" class="arr"/>
+  <rect x="360" y="163" width="100" height="46" rx="6" class="blk"/><text x="410" y="191" text-anchor="middle">atuador</text>
+  <line x1="460" y1="186" x2="510" y2="186" class="arr"/>
+  <rect x="510" y="163" width="90" height="46" rx="6" class="blk"/><text x="555" y="191" text-anchor="middle">planta</text>
+  <line x1="600" y1="186" x2="690" y2="186" class="arr"/><text x="645" y="178" font-size="13">saída</text>
+  <path d="M650,186 L650,240 L132,240 L132,202" class="arrA"/>
+  <rect x="330" y="224" width="100" height="32" rx="6" class="blk"/><text x="380" y="245" text-anchor="middle" font-size="14">sensor</text>
+</svg>
+<figcaption>A diferença está na seta de volta: medir e comparar. É ela que deixa o sistema corrigir perturbações que ninguém previu.</figcaption>
+</figure>
+
+<div class="box ok"><b class="t">Resposta direta: o S.B.R é malha fechada (e tem pedaços de malha aberta)</b>
+O equilíbrio é <b>malha fechada</b>: sem medir o ângulo o tempo todo, o robô cai. Um pêndulo invertido <b>não tem como</b>
+ser controlado em malha aberta, porque é instável e qualquer erro cresce. Mas existem duas partes em malha aberta,
+e é importante saber quais são (seção 5).</div>
+
+<!-- ================================================================== -->
+<h2 id="robo">4. O robô como sistema de controle</h2>
+
+<figure>
+<svg viewBox="0 0 720 230" role="img" aria-label="Cadeia: MPU6050, filtro, controlador, LEDC, driver, motor, robô, de volta ao MPU">
+  <rect x="20"  y="40" width="100" height="56" rx="6" class="blk"/><text x="70" y="64" text-anchor="middle" font-size="14">MPU6050</text><text x="70" y="83" text-anchor="middle" class="small">acel + gyro</text>
+  <line x1="120" y1="68" x2="150" y2="68" class="arr"/>
+  <rect x="150" y="40" width="110" height="56" rx="6" class="blk"/><text x="205" y="64" text-anchor="middle" font-size="14">filtro</text><text x="205" y="83" text-anchor="middle" class="small">complementar</text>
+  <line x1="260" y1="68" x2="290" y2="68" class="arr"/><text x="262" y="60" class="small">pitch</text>
+  <rect x="290" y="40" width="130" height="56" rx="6" class="blk2"/><text x="355" y="64" text-anchor="middle" font-size="14">controlador</text><text x="355" y="83" text-anchor="middle" class="small">PD + malhas</text>
+  <line x1="420" y1="68" x2="450" y2="68" class="arr"/><text x="420" y="60" class="small">m/s</text>
+  <rect x="450" y="40" width="110" height="56" rx="6" class="blk"/><text x="505" y="64" text-anchor="middle" font-size="14">LEDC</text><text x="505" y="83" text-anchor="middle" class="small">pulsos STEP</text>
+  <line x1="560" y1="68" x2="590" y2="68" class="arr"/>
+  <rect x="590" y="40" width="110" height="56" rx="6" class="blk"/><text x="645" y="64" text-anchor="middle" font-size="14">DRV8825</text><text x="645" y="83" text-anchor="middle" class="small">+ motor 1/16</text>
+  <line x1="645" y1="96" x2="645" y2="140" class="arr"/>
+  <rect x="560" y="140" width="140" height="50" rx="6" class="blk3"/><text x="630" y="170" text-anchor="middle" font-size="14">robô (planta)</text>
+  <path d="M560,165 L70,165 L70,98" class="arrA"/>
+  <text x="250" y="158" class="small">o corpo inclina → o sensor mede (realimentação)</text>
+  <text x="20" y="220" class="small">tudo isso a cada 5 ms (200 Hz), dentro de supervisor.run()</text>
+</svg>
+<figcaption>O caminho de um ciclo de controle. A seta azul é a realimentação, que fecha a malha.</figcaption>
+</figure>
+
+<!-- ================================================================== -->
+<h2 id="quantas">5. Quantas malhas o robô tem?</h2>
+
+<p>Mais de uma. São <b>três malhas fechadas</b>, duas em <b>cascata</b> (uma dentro da outra) e uma em paralelo, mais
+<b>dois trechos em malha aberta</b>:</p>
+
+<table>
+<tr><th>#</th><th>Malha</th><th>Mede</th><th>Comanda</th><th>Tipo</th></tr>
+<tr><td>1</td><td><b>Equilíbrio</b> (interna)</td><td>pitch e taxa de pitch</td><td>aceleração → velocidade da roda</td><td>fechada, PD integrado</td></tr>
+<tr><td>2</td><td><b>Velocidade</b> (externa)</td><td>velocidade da roda</td><td>quanto inclinar (<code>voff</code>), entregue à malha 1</td><td>fechada, PI, em cascata</td></tr>
+<tr><td>3</td><td><b>Curva</b></td><td>taxa de giro (gyro Z)</td><td>diferença de velocidade entre as rodas</td><td>fechada, PI, em paralelo</td></tr>
+<tr><td>—</td><td><b>Feedforward</b></td><td>nada</td><td>velocidade pedida, somada direto na roda</td><td>aberta (antecipação)</td></tr>
+<tr><td>—</td><td><b>Motor de passo</b></td><td>nada (sem encoder)</td><td>pulsos → rotação</td><td>aberta: confiamos que cada pulso vira um passo</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 720 330" role="img" aria-label="Diagrama de cascata: malha de velocidade externa gera voff para a malha de equilíbrio interna; malha de curva em paralelo; feedforward somado">
+  <text x="14" y="58" font-size="13">vtgt</text><text x="14" y="74" class="small">(drive)</text>
+  <line x1="52" y1="62" x2="80" y2="62" class="arr"/>
+  <rect x="80" y="44" width="60" height="36" rx="6" class="blk"/><text x="110" y="67" text-anchor="middle" font-size="12">rampa</text>
+  <line x1="140" y1="62" x2="168" y2="62" class="arr"/>
+  <circle cx="180" cy="62" r="12" class="sum"/><text x="180" y="67" text-anchor="middle" font-size="12">Σ</text>
+  <line x1="192" y1="62" x2="222" y2="62" class="arr"/>
+  <rect x="222" y="40" width="96" height="44" rx="6" class="blk3"/><text x="270" y="60" text-anchor="middle" font-size="13">PI velocidade</text><text x="270" y="76" text-anchor="middle" class="small">vkp, vki</text>
+  <line x1="318" y1="62" x2="352" y2="62" class="arrB"/><text x="322" y="54" class="small">voff</text>
+  <text x="352" y="38" class="small">sp</text><line x1="364" y1="30" x2="364" y2="50" class="arr"/>
+  <circle cx="364" cy="62" r="12" class="sum"/><text x="364" y="67" text-anchor="middle" font-size="12">Σ</text>
+  <line x1="376" y1="62" x2="404" y2="62" class="arr"/><text x="378" y="54" class="small">err</text>
+  <rect x="404" y="40" width="104" height="44" rx="6" class="blk2"/><text x="456" y="60" text-anchor="middle" font-size="13">PD → acel.</text><text x="456" y="76" text-anchor="middle" class="small">kp, kd</text>
+  <line x1="508" y1="62" x2="534" y2="62" class="arr"/><text x="510" y="54" class="small">m/s²</text>
+  <rect x="534" y="44" width="44" height="36" rx="6" class="blk"/><text x="556" y="67" text-anchor="middle" font-size="14">∫</text>
+  <line x1="578" y1="62" x2="604" y2="62" class="arr"/>
+  <circle cx="616" cy="62" r="12" class="sum"/><text x="616" y="67" text-anchor="middle" font-size="12">Σ</text>
+  <line x1="628" y1="62" x2="706" y2="62" class="arr"/><text x="640" y="54" class="small">roda (m/s)</text>
+  <!-- feedforward -->
+  <path d="M150,62 L150,22 L616,22 L616,48" class="arr dash"/><text x="380" y="16" class="small">feedforward (malha aberta)</text>
+  <!-- robo -->
+  <rect x="560" y="120" width="140" height="56" rx="6" class="blk"/><text x="630" y="146" text-anchor="middle" font-size="14">robô</text><text x="630" y="164" text-anchor="middle" class="small">corpo + rodas</text>
+  <line x1="680" y1="62" x2="680" y2="118" class="arr"/>
+  <!-- realimentação do ângulo -->
+  <path d="M560,140 L456,140 L456,86" class="arrA"/><text x="462" y="134" class="small">pitch, taxa (sensor)</text>
+  <path d="M456,140 L364,140 L364,76" class="arrA"/>
+  <!-- realimentação da velocidade -->
+  <path d="M640,62 L640,100 L180,100 L180,76" class="arrB dash"/><text x="196" y="96" class="small">velocidade da roda (sem encoder: a comandada)</text>
+  <!-- curva -->
+  <text x="14" y="252" font-size="13">wtgt</text>
+  <line x1="52" y1="248" x2="168" y2="248" class="arr"/>
+  <circle cx="180" cy="248" r="12" class="sum"/><text x="180" y="253" text-anchor="middle" font-size="12">Σ</text>
+  <line x1="192" y1="248" x2="222" y2="248" class="arr"/>
+  <rect x="222" y="226" width="96" height="44" rx="6" class="blk"/><text x="270" y="246" text-anchor="middle" font-size="13">PI curva</text><text x="270" y="262" text-anchor="middle" class="small">ykp, yki</text>
+  <line x1="318" y1="248" x2="560" y2="248" class="arr"/><text x="340" y="240" class="small">± diferença entre rodas (m/s)</text>
+  <rect x="560" y="226" width="140" height="44" rx="6" class="blk"/><text x="630" y="252" text-anchor="middle" font-size="13">rodas: v ± Δ</text>
+  <path d="M630,270 L630,300 L180,300 L180,262" class="arr"/><text x="300" y="316" class="small">taxa de giro medida (gyro Z)</text>
+</svg>
+<figcaption>Laranja: malha externa (velocidade). Azul: malha interna (equilíbrio). Abaixo, a curva em paralelo. Tracejado acima: feedforward.</figcaption>
+</figure>
+
+<div class="box"><b class="t">Por que em cascata?</b>
+A malha de velocidade <b>não mexe nas rodas</b>. Ela só diz à malha de equilíbrio "fique inclinado <code>voff</code> graus".
+A malha de equilíbrio é que faz o trabalho rápido. Regra prática de cascata: a malha de fora precisa ser várias vezes
+<b>mais lenta</b> que a de dentro. Por isso a malha de velocidade tem ganho pequeno: ela leva ~1–2 s pra agir, enquanto o
+equilíbrio reage em décimos de segundo. Foi o que vimos com <code>vkp</code> 15: a malha de fora ficou rápida demais e começou a oscilar.</div>
+
+<!-- ================================================================== -->
+<h2 id="pid">6. PID: P, I e D sem mistério</h2>
+
+<p>O PID é a receita de controlador mais usada no mundo. Ele soma três "opiniões" sobre o erro:</p>
+
+<table>
+<tr><th>Termo</th><th>Pergunta que responde</th><th>Efeito</th><th>Exagero causa</th></tr>
+<tr><td><b>P</b>: proporcional</td><td>Quão longe estou agora?</td><td>Força proporcional ao erro: uma "mola" puxando pro alvo.</td><td>Oscilação</td></tr>
+<tr><td><b>I</b>: integral</td><td>Há quanto tempo estou errando?</td><td>Acumula o erro e elimina o erro que sobra parado (deriva, puxão constante).</td><td>Oscilação lenta, tranco ao destravar (<i>windup</i>)</td></tr>
+<tr><td><b>D</b>: derivativo</td><td>Pra onde estou indo e quão rápido?</td><td>Freia o movimento: um "amortecedor".</td><td>Tremor rápido, amplifica ruído</td></tr>
+</table>
+
+<p class="center math">u = Kp·e + Ki·∫e dt + Kd·de/dt</p>
+
+<p><b>Analogia do carro com mola e amortecedor:</b> o P é a mola (puxa de volta), o D é o amortecedor (impede de ficar
+quicando) e o I é o motorista que, percebendo que o carro está sempre um pouco abaixo da altura certa, aperta a suspensão
+aos poucos.</p>
+
+<div class="box"><b class="t">Detalhe do código: D usando o giroscópio</b>
+Em vez de derivar o erro (<code>(err − err_anterior)/dt</code>, que é ruidoso), o firmware usa direto a <b>taxa de rotação
+do gyro</b> (<code>pitchRate</code>), que é a derivada do ângulo medida fisicamente. O mk2 original derivava o erro e
+ainda filtrava, o que adicionava atraso. Esse foi um dos bugs corrigidos.</div>
+
+<!-- ================================================================== -->
+<h2 id="unidades">7. Por que m/s e m/s² (e não "% de motor")</h2>
+
+<p>O código antigo saía em "% de potência" e convertia pra passos com um fator mágico (<code>stepsPerRev × 3</code>).
+O novo fala <b>a língua da física</b>:</p>
+
+<ul>
+<li><b><code>kp</code> = 0,35 (m/s²)/°</b>: a cada grau de erro, peço 0,35 m/s² de aceleração à roda.</li>
+<li><b><code>kd</code> = 0,03 (m/s²)/(°/s)</b>: a cada °/s de rotação, peço 0,03 m/s².</li>
+<li><b>Saída</b>: velocidade da roda em m/s, convertida por último em passos/s.</li>
+</ul>
+
+<p><b>Por que isso importa?</b></p>
+<ol>
+<li><b>Os ganhos têm significado.</b> Pra segurar uma inclinação de 1°, a física exige
+<span class="math">a = g·tan 1° ≈ 9,81 × 0,01745 ≈ 0,171 m/s²</span>. Então qualquer <code>kp</code> abaixo de
+<b>0,171</b> é fraco demais: o robô cai, por mais que você ajuste o resto. O nosso 0,35 é ~2× esse mínimo.
+No antigo "% de motor", ninguém conseguia dizer isso.</li>
+<li><b>Troca de hardware não quebra a sintonia.</b> Mudamos de full step pra 1/16 e <b>não mexemos em nenhum ganho</b>:
+só no fator de conversão, que é calculado:
+<pre>passos por metro = passos_por_volta / (π × diâmetro)
+full step: 200  / (π × 0,074 m) ≈   860 passos/m
+1/16:      3200 / (π × 0,074 m) ≈ 13.765 passos/m</pre>
+Trocar a roda por uma maior também só muda o diâmetro na conta.</li>
+<li><b>Dá pra conferir com o mundo real:</b> <code>vmax</code> 0,8 m/s é velocidade de verdade, que você pode medir com uma trena e um cronômetro.</li>
+</ol>
+
+<!-- ================================================================== -->
+<h2 id="integrar">8. Por que o PD vira aceleração e é integrado</h2>
+
+<p>Esse é o ponto mais sutil do projeto, e o motivo nº 4 de o mk2 original nunca ter equilibrado.</p>
+
+<p>O motor de passo <b>impõe velocidade</b>: você manda N pulsos por segundo e a roda gira naquela velocidade. Mas, como
+vimos na seção 1, o que endireita o pêndulo é a <b>aceleração</b>. Então:</p>
+
+<pre>// balance.cpp, a cada 5 ms
+accel = kp * err + kd * pitchRate;   // quanto quero ACELERAR (m/s²)
+speed += accel * dt;                 // integro → velocidade (m/s)
+motores.setSpeeds(speed * passos_por_metro);</pre>
+
+<h3>Por que não mandar o PD direto como velocidade?</h3>
+<p>Dá pra mostrar com um modelo simples. Linearizando o pêndulo (ângulos pequenos, θ em radianos, L = altura efetiva do
+centro de massa):</p>
+<p class="center math">L·θ̈ = g·θ − a</p>
+<p>(a gravidade derruba proporcional a θ; a aceleração <i>a</i> da base endireita).</p>
+
+<table>
+<tr><th></th><th>PD direto em velocidade<br><small>v = Kp·θ + Kd·θ̇</small></th><th>PD como aceleração (o nosso)<br><small>a = Kp·θ + Kd·θ̇</small></th></tr>
+<tr><td>aceleração resultante</td><td>a = dv/dt = Kp·θ̇ + Kd·θ̈</td><td>a = Kp·θ + Kd·θ̇</td></tr>
+<tr><td>equação do sistema</td><td>(L+Kd)·θ̈ + Kp·θ̇ <b>− g·θ</b> = 0</td><td>L·θ̈ + Kd·θ̇ + <b>(Kp − g)·θ</b> = 0</td></tr>
+<tr><td>conclusão</td><td>O termo em θ é <b>negativo</b> pra qualquer ganho → instável, sempre cai.</td><td>Estável se <b>Kp &gt; g</b> e <b>Kd &gt; 0</b>.</td></tr>
+</table>
+
+<p>Regra das equações de 2ª ordem: <span class="math">A·θ̈ + B·θ̇ + C·θ = 0</span> é estável quando A, B e C são
+todos positivos. É a forma mais simples do critério de Routh-Hurwitz. Interpretação: <b>C é a "mola"</b>, que precisa
+puxar de volta (positiva), e <b>B é o "amortecedor"</b>. No PD em velocidade falta a mola: nada empurra de volta
+proporcional ao ângulo, e a gravidade vence.</p>
+
+<div class="box"><b class="t">E esse "Kp &gt; g" é o mesmo 0,171 da seção 7</b>
+g = 9,81 m/s² por <b>radiano</b>. Por grau: 9,81 × π/180 ≈ <b>0,171</b> (m/s²)/°. A matemática e a intuição física dão o
+mesmo número.</div>
+
+<div class="box lesson"><b class="t">Bônus: isso é um PI disfarçado</b>
+Integrando <code>a = Kp·e + Kd·θ̇</code>, a velocidade fica <code>v = Kp·∫e + Kd·θ</code>: um <b>PI</b> sobre o ângulo,
+com saída em velocidade. Projetos de hobby que mandam "PID direto pro motor" e funcionam geralmente têm um Ki grande, que
+é exatamente esse termo integral fazendo o papel de estabilizar.</div>
+
+<!-- ================================================================== -->
+<h2 id="cascata">9. A malha de velocidade (cascata)</h2>
+
+<p>Só com a malha de equilíbrio, o robô fica em pé mas <b>vai andando devagar</b> pra um lado (nada controla a velocidade),
+e um setpoint um pouco errado vira deriva. A malha de velocidade resolve:</p>
+
+<pre>// velocity.cpp
+erro_v  = alvo_com_rampa − velocidade_da_roda;
+voff    = vkp * erro_v + vki * ∫erro_v;     // em GRAUS
+// e a malha de equilíbrio passa a perseguir sp + voff</pre>
+
+<h3>Como ele anda pra frente (e por que primeiro dá ré)</h3>
+<ol>
+<li>Você pede 0,2 m/s → <code>erro_v</code> &gt; 0 → <code>voff</code> &gt; 0: "incline pra frente".</li>
+<li>Pra inclinar pra frente, a malha de equilíbrio precisa tirar a base de baixo do peso: <b>dá uma ré rápida</b>.</li>
+<li>Já inclinado, o robô começa a cair pra frente, e a malha de equilíbrio <b>acelera pra frente</b> pra não cair. Isso é andar.</li>
+<li>Chegando na velocidade, <code>erro_v</code> → 0, <code>voff</code> → 0: volta a ficar reto, e velocidade constante não precisa de inclinação.</li>
+<li>Pra frear: o contrário. Ele inclina pra trás.</li>
+</ol>
+<p>Esse "primeiro vai pro lado errado" tem nome: sistema de <b>fase não mínima</b>. É uma propriedade física, não um bug.
+Também por isso a malha externa precisa ser lenta.</p>
+
+<div class="box warn"><b class="t">Por que ele não andou no seu robô</b>
+O passo 3 depende de o <b>centro de massa</b> realmente ir pra frente do eixo quando o sensor inclina. Com o chassi
+flexionando, a parte de cima (com o MPU) inclinava, a de baixo (com o peso) não. O sensor dizia "inclinei", a gravidade não
+puxava, e as rodas não precisavam acelerar. A malha estava certa, mas a planta real não era a do modelo. Por isso a bateria
+em cima e o chassi rígido.</div>
+
+<p><b>Feedforward</b> (o tracejado do diagrama): além disso, o código soma a velocidade pedida <b>direto</b> na roda.
+Se você já sabe o que quer, não precisa esperar o erro aparecer: isso é <b>antecipar</b> (malha aberta), e a malha fechada
+corrige o que sobrar.</p>
+
+<!-- ================================================================== -->
+<h2 id="curva">10. A malha de curva</h2>
+<p>Pra virar, não precisa inclinar nada: basta uma roda mais rápida que a outra. A malha mede a taxa de giro no
+<b>gyro Z</b> e comanda a diferença entre as rodas:</p>
+<pre>erro_giro = wtgt − taxa_medida;               // °/s
+dif = ykp * erro_giro + yki * ∫erro_giro;     // m/s
+roda_A = v + dif;   roda_B = v − dif;</pre>
+<p>Por isso a curva funcionou antes do andar: ela age direto nas rodas, sem depender do corpo inclinar.
+Lição de sintonia: com <code>ykp</code> 0,003 o tremor de giro aumentou (o P reagia ao tremor rápido). Com 0,001 ficou melhor.
+P alto em sinal ruidoso amplifica ruído.</p>
+
+<!-- ================================================================== -->
+<h2 id="filtro">11. O sensor por trás: filtro complementar</h2>
+
+<p>Nenhum dos dois sensores do MPU6050 sozinho dá um ângulo bom:</p>
+<table>
+<tr><th></th><th>Acelerômetro</th><th>Giroscópio</th></tr>
+<tr><td>Mede</td><td>Direção da gravidade → ângulo direto (<code>atan2(ax, az)</code>)</td><td>Velocidade de rotação (°/s), que integrada vira ângulo</td></tr>
+<tr><td>Bom em</td><td>Longo prazo: não deriva</td><td>Curto prazo: rápido, limpo</td></tr>
+<tr><td>Ruim em</td><td>Curto prazo: qualquer aceleração das rodas parece inclinação</td><td>Longo prazo: o erro (bias) se acumula e o ângulo deriva</td></tr>
+</table>
+
+<p>O filtro complementar junta os dois, confiando no gyro pro rápido e no acelerômetro pro lento:</p>
+<pre>pitch = α·(pitch + taxa_gyro·dt) + (1 − α)·ângulo_acel      // α = 0,995</pre>
+<p>Constante de tempo: <span class="math">τ = α·dt/(1−α)</span> = 0,995 × 0,005 / 0,005 ≈ <b>1 s</b>. Variações mais rápidas
+que ~1 s vêm do gyro; mais lentas, do acelerômetro. Com α = 0,98 seria ~0,25 s, mais exposto ao acelerômetro "mentindo"
+quando as rodas aceleram (medimos isso: correlação +0,40 entre aceleração e erro do acelerômetro).</p>
+
+<div class="box lesson"><b class="t">Lição do primeiro MPU</b>
+Ele lia só <b>22%</b> da rotação real no gyro. Com o filtro confiando no gyro pro curto prazo, o "ângulo" chegava atrasado
+e pequeno. Controle nenhum compensa um sensor que mente. Primeiro se valida o sensor (o teste de comparar
+<code>gyroint</code> com <code>acc</code>), depois se sintoniza.</div>
+
+<!-- ================================================================== -->
+<h2 id="tempo">12. Tempo real: por que 200 Hz fixos</h2>
+<p>O controlador é <b>discreto</b>: ele "acorda" a cada 5 ms, lê o sensor, calcula e manda pros motores. Duas exigências:</p>
+<ul>
+<li><b>Rápido o suficiente</b> comparado à dinâmica: o robô cai em ~0,2–0,7 s, então 200 amostras por segundo sobram.</li>
+<li><b>Intervalo constante</b>: integrar (<code>speed += accel·dt</code>) e filtrar dependem de <code>dt</code>. No mk2 original
+o <code>dt</code> vinha de <code>millis()</code>, variava, e quando dava 0 virava 0,01 (10× maior). O controle integrava errado.
+Hoje há um tick fixo (<code>main.cpp</code>) e a métrica <code>tick</code> confirma os 200 Hz, até com o WiFi ligado.</li>
+</ul>
+<p>Por isso também a regra de não gravar na flash durante o equilíbrio: uma escrita trava o chip por dezenas de ms, e nesse
+tempo o robô estaria "às cegas".</p>
+
+<!-- ================================================================== -->
+<h2 id="estab">13. Estabilidade, atraso e oscilação</h2>
+<p><b>Estável</b> = depois de uma perturbação, volta ao alvo. <b>Instável</b> = o erro cresce (cai ou oscila cada vez mais).
+<b>Marginal</b> = oscila sem crescer nem sumir (o "ciclo de 4 Hz" que vimos em full step).</p>
+
+<p><b>O inimigo nº 1 é o atraso.</b> O controle reage ao que aconteceu há algum tempo. Se o atraso é grande comparado ao
+tempo de reação do sistema, a correção chega na hora errada: empurra quando já devia frear, e a oscilação cresce.
+Em linguagem de controle, atraso = <b>perda de fase</b>: 40 ms numa oscilação de 4 Hz são 58° de atraso.</p>
+
+<p>Fontes de atraso que encontramos no projeto: folga da roda no eixo, motor em full step (pulsos lentos perto de zero),
+filtro do sensor, e a rede/USB se o controle fosse feito no PC (por isso o controle roda <b>na ESP</b> e o PC só manda
+alvos).</p>
+
+<div class="box"><b class="t">Por que o peso em cima ajuda (sua pergunta)</b>
+Um pêndulo cai com tempo característico <span class="math">√(L/g)</span>: quanto mais alto o centro de massa, mais devagar.
+Na simulação abaixo, com o <code>kd</code> reajustado: <b>L = 0,40 m aguenta 60 ms de atraso; L = 0,03 m cai com 40 ms</b>.
+Com o peso embaixo dá pra equilibrar, mas a tolerância a atraso e imperfeição é bem menor. É o lápis contra a vassoura.</div>
+
+<!-- ================================================================== -->
+<h2 id="sim">14. Simulador interativo</h2>
+<p>Modelo simplificado do robô (pêndulo de altura L sobre uma base cuja velocidade o motor impõe) com <b>a mesma lei de
+controle do firmware</b>, a 200 Hz. Experimente:</p>
+<ul>
+<li><b>Kp abaixo de 0,171</b> → cai (a "mola" é mais fraca que a gravidade).</li>
+<li><b>Kd = 0</b> → sem amortecedor.</li>
+<li><b>Modo "PD direto em velocidade"</b> → o erro do mk2 original: cai com qualquer ganho.</li>
+<li><b>Atraso de 60 ms</b> → oscilação. Depois aumente o L (e o Kd) e veja aguentar.</li>
+<li><b>"Andar 0,2 m/s"</b> no gráfico de baixo: observe a ré inicial (fase não mínima) e a inclinação na arrancada.</li>
+<li><b>Modo "só equilíbrio"</b> → sem malha de velocidade, ele deriva.</li>
+</ul>
+
+<div class="sim">
+  <canvas id="scene" width="820" height="240" aria-label="Animação do robô"></canvas>
+  <canvas id="plot" width="820" height="200" aria-label="Gráfico de ângulo e velocidade" style="margin-top:8px"></canvas>
+  <div class="legend">
+    <span><i style="background:#2f6fb3"></i>ângulo θ (°)</span>
+    <span><i style="background:#c2572b"></i>velocidade da roda (m/s ×10)</span>
+    <span><i style="background:#8a8f98"></i>velocidade pedida (m/s ×10)</span>
+  </div>
+  <div class="ctrls">
+    <label><span>Kp (m/s² por °) <output id="o_kp"></output></span><input id="kp" type="range" min="0" max="1" step="0.01" value="0.35"></label>
+    <label><span>Kd (m/s² por °/s) <output id="o_kd"></output></span><input id="kd" type="range" min="0" max="0.12" step="0.002" value="0.03"></label>
+    <label><span>vkp (° por m/s) <output id="o_vkp"></output></span><input id="vkp" type="range" min="0" max="16" step="0.5" value="4"></label>
+    <label><span>vki <output id="o_vki"></output></span><input id="vki" type="range" min="0" max="5" step="0.1" value="1"></label>
+    <label><span>Altura do centro de massa L (m) <output id="o_L"></output></span><input id="L" type="range" min="0.03" max="0.5" step="0.01" value="0.15"></label>
+    <label><span>Atraso comando → roda (ms) <output id="o_delayMs"></output></span><input id="delayMs" type="range" min="0" max="100" step="5" value="0"></label>
+  </div>
+  <div class="btns">
+    <select id="mode" aria-label="Lei de controle">
+      <option value="cascata">Cascata completa (o firmware)</option>
+      <option value="so-angulo">Só equilíbrio (sem malha de velocidade)</option>
+      <option value="pd-velocidade">PD direto em velocidade (o erro do mk2)</option>
+    </select>
+    <button id="push">Empurrão</button>
+    <button id="drive">Andar 0,2 m/s</button>
+    <button id="reset">Reiniciar</button>
+  </div>
+  <div class="status" id="status"></div>
+</div>
+<p class="small" style="color:var(--muted);font-size:.88em">Limitações do modelo: ignora inércia das rodas, atrito, flexão do chassi, perda de passo
+e ruído do sensor. Serve pra intuição, não pra copiar ganhos.</p>
+
+<!-- ================================================================== -->
+<h2 id="limites">15. Saturação, anti-windup, rampa e watchdog</h2>
+<p>Controle de verdade tem limites físicos. Cada um vira uma regra no código:</p>
+<table>
+<tr><th>Mecanismo</th><th>Problema que evita</th><th>Onde</th></tr>
+<tr><td><b>Saturação</b> (<code>vmax</code>)</td><td>Pedir mais velocidade que o motor dá.</td><td><code>balance.cpp</code></td></tr>
+<tr><td><b>Folga</b>: alvo ≤ vmax/2</td><td>Andando no limite, não sobra velocidade pra corrigir uma inclinação: ele cai. Vimos isso no empurrão forte.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). O integral tem limite e congela durante o <code>drive</code>.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Rampa</b> (0,3 m/s²)</td><td>Degrau no alvo vira tranco (lembre da fase não mínima).</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Watchdog</b> (0,5 s)</td><td>Controle caiu (WiFi, programa travou): para sozinho e fica equilibrando.</td><td><code>velocity.cpp</code>, <code>motor.cpp</code></td></tr>
+<tr><td><b>Failsafe</b> (45°)</td><td>Já caiu: desliga os motores.</td><td><code>supervisor.cpp</code></td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 id="licoes">16. O que cada bug do projeto ensina</h2>
+<table>
+<tr><th>O que aconteceu</th><th>Conceito</th></tr>
+<tr><td>MPU original lia 22% da rotação</td><td><b>Sensor</b>: a realimentação só é tão boa quanto a medida. Validar antes de sintonizar.</td></tr>
+<tr><td>LEDC não gerava &lt; 76 Hz; full step com zona morta</td><td><b>Não linearidade do atuador</b>: o atuador não faz o que o controlador acha que fez.</td></tr>
+<tr><td>Oscilação de 4 Hz que nenhum ganho resolvia</td><td><b>Atraso</b> (folga das rodas): perda de fase não se corrige com ganho.</td></tr>
+<tr><td>Diminuir o Kd piorou</td><td>D é <b>amortecimento</b>: tirar o amortecedor faz quicar mais.</td></tr>
+<tr><td>PD direto em velocidade (mk2 original)</td><td><b>Estrutura errada</b>: nenhum ganho estabiliza se falta o termo que faz de "mola".</td></tr>
+<tr><td>Robô derivando pra trás</td><td><b>Erro em regime</b>: setpoint errado; o termo I corrige sozinho.</td></tr>
+<tr><td>Cabo USB segurando o robô</td><td><b>Perturbação externa</b>: a malha "luta" contra ela e esconde o comportamento real.</td></tr>
+<tr><td><code>vkp</code> 15 oscilou</td><td><b>Cascata</b>: a malha externa precisa ser bem mais lenta que a interna.</td></tr>
+<tr><td>Chassi flexível impede andar</td><td><b>Modelo × planta</b>: o controle assume corpo rígido; se a planta é outra, a malha cumpre o objetivo errado.</td></tr>
+<tr><td>Bateria fraca derrubou os motores</td><td><b>Atuador saturando</b>: sem torque, o comando não vira movimento.</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 id="sintonia">17. Como sintonizar (receita)</h2>
+<ol>
+<li><b>Valide o sensor</b>: incline devagar e confira <code>gyroint</code> ≈ <code>acc</code>; parado, deriva &lt; 0,1°/s.</li>
+<li><b>Ache o setpoint</b>: o ângulo em que ele fica "sem peso" na mão.</li>
+<li><b>Malha interna sozinha</b> (<code>vkp</code> = <code>vki</code> = 0): Kd pequeno, suba o Kp até ele ficar em pé com
+oscilação lenta; suba o Kd até amortecer; se aparecer tremor rápido, desça o Kd.</li>
+<li><b>Malha de velocidade</b>: suba <code>vkp</code> até ele parar de derivar e voltar depois de um empurrão sem ir e voltar
+várias vezes. Depois um pouco de <code>vki</code> pra tirar a deriva lenta.</li>
+<li><b>Mude uma coisa por vez</b> e grave os dados (PlotJuggler). Sem gráfico, sintonia vira adivinhação.</li>
+</ol>
+
+<!-- ================================================================== -->
+<h2 id="mapa">18. Mapa conceito → código</h2>
+<table>
+<tr><th>Conceito</th><th>Arquivo / função</th></tr>
+<tr><td>Tick fixo de 200 Hz</td><td><code>src/main.cpp</code>, <code>loop()</code></td></tr>
+<tr><td>Máquina de estados, failsafe</td><td><code>src/supervisor.cpp</code></td></tr>
+<tr><td>Filtro complementar, leitura do MPU</td><td><code>src/imu_manager.cpp</code>, <code>read()</code> / <code>_readRaw()</code></td></tr>
+<tr><td>Malha de equilíbrio (PD → aceleração → ∫), feedforward</td><td><code>src/balance.cpp</code>, <code>compute()</code></td></tr>
+<tr><td>Malha de velocidade, curva, rampa, watchdog</td><td><code>src/velocity.cpp</code>, <code>update()</code></td></tr>
+<tr><td>Conversão m/s → pulsos, rampa do motor (malha aberta)</td><td><code>src/motor.cpp</code></td></tr>
+<tr><td>Ganhos e limites (unidades nos comentários)</td><td><code>include/config.hpp</code></td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 id="glossario">19. Glossário</h2>
+<table>
+<tr><td><b>Setpoint / referência</b></td><td>Valor desejado.</td></tr>
+<tr><td><b>Realimentação</b></td><td>Usar a medida da saída pra calcular o comando.</td></tr>
+<tr><td><b>Feedforward</b></td><td>Comando calculado sem medir, por antecipação.</td></tr>
+<tr><td><b>Cascata</b></td><td>Uma malha cuja saída é o setpoint de outra, mais interna e rápida.</td></tr>
+<tr><td><b>Regime permanente</b></td><td>Como o sistema fica depois que os transitórios passam.</td></tr>
+<tr><td><b>Overshoot</b></td><td>Passar do alvo antes de assentar.</td></tr>
+<tr><td><b>Fase não mínima</b></td><td>Responde primeiro no sentido contrário (a ré antes de andar).</td></tr>
+<tr><td><b>Windup</b></td><td>Integral acumulando enquanto a saída está travada.</td></tr>
+<tr><td><b>Zona morta</b></td><td>Faixa de comando que não produz efeito (abaixo de 20 passos/s).</td></tr>
+<tr><td><b>Bias</b></td><td>Erro constante de um sensor (gyro parado lendo ≠ 0).</td></tr>
+<tr><td><b>Constante de tempo τ</b></td><td>Tempo característico de um filtro ou sistema (~63% da resposta).</td></tr>
+</table>
+
+</main>
+
+<script>
+// SIM-CORE-BEGIN
+// Modelo simplificado do robô: pêndulo invertido sobre uma base que o stepper move
+// com a velocidade que mandarmos. Ângulos em graus nos ganhos (igual ao firmware).
+const G = 9.81, DT = 0.005; // 200 Hz, como o tick do firmware
+
+function newSim(p) {
+  return { p, th: 0, thd: 0, x: 0, v: 0, vbal: 0, vint: 0, vt: 0, vramp: 0, queue: [], t: 0, fallen: false };
+}
+
+function step(s) {
+  const p = s.p;
+  if (s.fallen) return;
+  const deg = 180 / Math.PI;
+  const pitch = s.th * deg, rate = s.thd * deg;                         // "sensor" ideal
+  s.vramp += Math.max(-0.3 * DT, Math.min(0.3 * DT, s.vt - s.vramp));    // rampa 0,3 m/s²
+  const verr = s.vramp - s.v;
+  if (s.vramp === 0) s.vint = Math.max(-0.5, Math.min(0.5, s.vint + verr * DT));
+  const voff = p.mode === 'cascata' ? Math.max(-5, Math.min(5, p.vkp * verr + p.vki * s.vint)) : 0;
+  const err = pitch - voff;                                              // setpoint = 0 no modelo
+  let cmd;
+  if (p.mode === 'pd-velocidade') {
+    cmd = Math.max(-p.vmax, Math.min(p.vmax, (p.kp * err + p.kd * rate) * 0.1)); // errado de propósito
+  } else {
+    const a = p.kp * err + p.kd * rate;                                  // PD → aceleração
+    s.vbal += a * DT;                                                    // integra → velocidade
+    const ff = p.mode === 'cascata' ? s.vramp : 0;                       // feedforward
+    const wheel = Math.max(-p.vmax, Math.min(p.vmax, s.vbal + ff));
+    s.vbal = wheel - ff;
+    cmd = wheel;
+  }
+  s.queue.push(cmd);                                                     // atraso comando → roda
+  const n = Math.max(0, Math.round(p.delayMs / 1000 / DT));
+  const applied = s.queue.length > n ? s.queue.shift() : 0;
+  const acc = (applied - s.v) / DT;                                      // motor impõe a velocidade
+  s.v = applied;
+  s.x += s.v * DT;
+  const thdd = (G * Math.sin(s.th) - acc * Math.cos(s.th)) / p.L;        // pêndulo invertido
+  s.thd += thdd * DT;
+  s.th += s.thd * DT;
+  s.t += DT;
+  if (Math.abs(s.th) > Math.PI / 4) s.fallen = true;                     // failsafe 45°
+}
+// SIM-CORE-END
+
+(function () {
+  const ids = ['kp', 'kd', 'vkp', 'vki', 'L', 'delayMs'];
+  const el = id => document.getElementById(id);
+  const css = getComputedStyle(document.documentElement);
+  const col = n => css.getPropertyValue(n).trim();
+  const params = () => {
+    const p = { vmax: 0.8, mode: el('mode').value };
+    ids.forEach(id => { p[id] = parseFloat(el(id).value); el('o_' + id).textContent = el(id).value; });
+    return p;
+  };
+  let sim, hist;
+  function reset() {
+    sim = newSim(params());
+    sim.th = 3 * Math.PI / 180;
+    hist = [];
+  }
+  ids.concat(['mode']).forEach(id => el(id).addEventListener('input', () => { sim.p = params(); }));
+  el('reset').onclick = reset;
+  el('push').onclick = () => { if (!sim.fallen) sim.thd += 0.6; };
+  el('drive').onclick = () => {
+    sim.vt = sim.vt ? 0 : 0.2;
+    el('drive').textContent = sim.vt ? 'Parar (0 m/s)' : 'Andar 0,2 m/s';
+  };
+
+  const scene = el('scene'), sctx = scene.getContext('2d');
+  const plot = el('plot'), pctx = plot.getContext('2d');
+
+  function drawScene() {
+    const W = scene.width, H = scene.height, ground = H - 30;
+    sctx.clearRect(0, 0, W, H);
+    sctx.strokeStyle = col('--muted'); sctx.lineWidth = 2;
+    sctx.beginPath(); sctx.moveTo(0, ground); sctx.lineTo(W, ground); sctx.stroke();
+    // marcas no chão que andam com a posição (mostra deslocamento)
+    const pxPerM = 300, off = ((sim.x * pxPerM) % 60 + 60) % 60;
+    for (let gx = -off; gx < W; gx += 60) { sctx.beginPath(); sctx.moveTo(gx, ground); sctx.lineTo(gx - 8, ground + 10); sctx.stroke(); }
+    const cx = W / 2, r = 22, cy = ground - r;
+    const len = Math.max(40, Math.min(170, sim.p.L * 420));
+    const tx = cx + Math.sin(sim.th) * len, ty = cy - Math.cos(sim.th) * len;
+    sctx.strokeStyle = sim.fallen ? col('--accent2') : col('--accent'); sctx.lineWidth = 12; sctx.lineCap = 'round';
+    sctx.beginPath(); sctx.moveTo(cx, cy); sctx.lineTo(tx, ty); sctx.stroke();
+    sctx.fillStyle = sctx.strokeStyle; sctx.beginPath(); sctx.arc(tx, ty, 14, 0, 7); sctx.fill();
+    sctx.fillStyle = col('--card'); sctx.strokeStyle = col('--fg'); sctx.lineWidth = 2;
+    sctx.beginPath(); sctx.arc(cx, cy, r, 0, 7); sctx.fill(); sctx.stroke();
+    const ang = sim.x / 0.037;   // roda de 74 mm
+    sctx.beginPath(); sctx.moveTo(cx, cy); sctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r); sctx.stroke();
+    sctx.fillStyle = col('--fg'); sctx.font = '14px system-ui';
+    sctx.fillText(`θ = ${(sim.th * 180 / Math.PI).toFixed(1)}°   v = ${sim.v.toFixed(2)} m/s   x = ${sim.x.toFixed(2)} m   t = ${sim.t.toFixed(1)} s`, 12, 22);
+  }
+
+  function drawPlot() {
+    const W = plot.width, H = plot.height, mid = H / 2, span = 10; // ±10
+    pctx.clearRect(0, 0, W, H);
+    pctx.strokeStyle = col('--line'); pctx.lineWidth = 1;
+    for (const y of [-10, -5, 0, 5, 10]) { const py = mid - y / span * (H / 2 - 8); pctx.beginPath(); pctx.moveTo(0, py); pctx.lineTo(W, py); pctx.stroke(); }
+    pctx.fillStyle = col('--muted'); pctx.font = '11px system-ui';
+    pctx.fillText('+10', 4, 14); pctx.fillText('0', 4, mid - 3); pctx.fillText('−10', 4, H - 6);
+    const series = [['th', '#2f6fb3'], ['v', '#c2572b'], ['vt', '#8a8f98']];
+    for (const [k, c] of series) {
+      pctx.strokeStyle = c; pctx.lineWidth = 2; pctx.beginPath();
+      hist.forEach((h, i) => {
+        const px = W - (hist.length - 1 - i) * (W / 600);
+        const py = mid - Math.max(-span, Math.min(span, h[k])) / span * (H / 2 - 8);
+        i ? pctx.lineTo(px, py) : pctx.moveTo(px, py);
+      });
+      pctx.stroke();
+    }
+  }
+
+  function status() {
+    const p = sim.p;
+    let msg = sim.fallen ? '<b>Caiu.</b> ' : '<b>Em pé.</b> ';
+    if (p.mode === 'pd-velocidade') msg += 'PD direto em velocidade não tem o termo que faz de "mola": cai com qualquer ganho.';
+    else if (p.kp <= 0.171) msg += `Kp ${p.kp.toFixed(2)} ≤ 0,171: mais fraco que a gravidade.`;
+    else if (p.kd === 0) msg += 'Sem Kd não há amortecimento.';
+    else if (p.delayMs >= 40) msg += `Atraso de ${p.delayMs} ms: veja como a correção chega tarde. Aumente L (e Kd) e compare.`;
+    else if (p.mode === 'so-angulo') msg += 'Sem malha de velocidade nada controla a velocidade: ele deriva.';
+    else msg += 'Tente: Empurrão, Andar, Kp abaixo de 0,171, atraso de 60 ms.';
+    el('status').innerHTML = msg;
+  }
+
+  let acc = 0, last = performance.now();
+  function frame(now) {
+    acc += Math.min(0.1, (now - last) / 1000); last = now;
+    while (acc >= DT) {
+      step(sim); acc -= DT;
+      if (Math.round(sim.t / DT) % 4 === 0) {        // amostra a 50 Hz pro gráfico
+        hist.push({ th: sim.th * 180 / Math.PI, v: sim.v * 10, vt: sim.vramp * 10 });
+        if (hist.length > 600) hist.shift();
+      }
+    }
+    drawScene(); drawPlot(); status();
+    requestAnimationFrame(frame);
+  }
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

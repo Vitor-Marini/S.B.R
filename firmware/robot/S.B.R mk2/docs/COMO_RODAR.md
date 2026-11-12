@@ -24,6 +24,24 @@ A configuração (ganhos, setpoint etc.) fica em `/config.json` na flash e **sob
 
 ---
 
+## 1b. Atalho: tudo de uma vez (WiFi + PlotJuggler + ponte)
+
+```bash
+tools/sbr.sh            # via WiFi (sbr.local); tools/sbr.sh usb = pelo cabo
+python3 tools/gamepad.py   # em outro terminal: DS4 conectado no PC (USB ou Bluetooth)
+```
+
+Abre o PlotJuggler com o layout `tools/sbr_layout.xml` (abas *Equilibrio* e *Saude*) já ouvindo
+a UDP 9870, liga o `stream` e deixa este terminal como terminal do robô.
+A rede WiFi é salva uma vez pela USB com `wifi <rede> <senha>` (2,4 GHz, nome sem espaços).
+O DS4 **não** conecta direto na ESP32-C3 (ela só tem Bluetooth LE; o DS4 é Bluetooth Clássico).
+
+DS4: analógico esquerdo = frente/trás, direito = virar · △ start · ○ para de andar · ✕ **stop** (desliga
+o equilíbrio: segure o robô) · L1/R1 velocidade · **Options** = modo motores (só em IDLE, rodas no ar:
+cada analógico vertical gira uma roda, até 1 volta/s).
+
+---
+
 ## 2. Abrir a ponte serial
 
 A ponte é o único programa que abre a USB. Por ela, ao mesmo tempo:
@@ -56,6 +74,7 @@ Deve aparecer `[conectado em /dev/ttyACM0]`. Se o cabo cair, ela reconecta sozin
 | `accel` | saída do PD = **controle** (m/s² pedidos à roda) |
 | `err` | **erro** de ângulo: pitch − (setpoint + voff) (°) |
 | `voff` | offset de ângulo pedido pela malha de velocidade (°) |
+| `vtgt` / `wtgt` | velocidade (m/s) e curva (°/s) **pedidas** pelos comandos (`drive`, teclado, DS4) |
 | `yrate` | taxa de giro (°/s, + = esquerda) |
 | `state` | estado do robô (tabela abaixo) |
 | `tick` | taxa do loop de controle (deve ficar em 200) |
@@ -112,6 +131,7 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 |---------|-----------|
 | `start` / `stop` | liga / desliga o equilíbrio |
 | `drive <m/s> <°/s>` | andar/virar (+ = frente / esquerda). Vale por 0,5 s: repita a 10–20 Hz |
+| `motors <L> <R>` | teste remoto dos motores em passos/s (só IDLE). Vale por 0,5 s. "L" do firmware = roda **direita** |
 | `state` | estado atual |
 | `status` | config completa + telemetria |
 | `angle` | pitch, ângulo do acelerômetro, gyro integrado, taxa do loop (deve ser 200 Hz) |
@@ -135,8 +155,8 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 | `ykp` | 0.001 | curva: (m/s de diferença entre rodas) por °/s de erro |
 | `yki` | 0.01 | integral da curva |
 | `alpha` | 0.995 | filtro: quanto confia no gyro (0,98 = mais acelerômetro) |
-| `spr` | 200 | passos por volta: 200 em full step, **3200 em 1/16** |
-| `accel` | 25000 | trava de aceleração do motor (passos/s²). **400000 em 1/16** |
+| `spr` | 3200 | passos por volta: 200 em full step, **3200 em 1/16 (atual)** |
+| `accel` | 400000 | trava de aceleração do motor (passos/s²). 25000 em full step |
 | `abx`, `abz` | 0 | bias do acelerômetro (m/s²) |
 
 ### Como ajustar o PD

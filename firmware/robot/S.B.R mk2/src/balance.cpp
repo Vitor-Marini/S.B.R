@@ -24,17 +24,22 @@ void BalanceController::compute() {
     _angleError = pitch - (cfg.setpoint + _angleOffset);
     float accel = cfg.anglePid.kp * _angleError + cfg.anglePid.kd * pitchRate;
 
+    // roda = equilíbrio + velocidade pedida (feedforward). Andar não depende de inclinar:
+    // com o centro de massa baixo o contato do pneu segura ~2° de inclinação sem rolar.
     _speed += accel * dt;
-    _speed = constrain(_speed, -cfg.maxVelocity, cfg.maxVelocity);
+    _wheel = constrain(_speed + _ff, -cfg.maxVelocity, cfg.maxVelocity);
+    _speed = _wheel - _ff;  // limita o total, sem acumular além do vmax
 
     float stepsPerMeter = cfg.motor.stepsPerRev / (PI * cfg.motor.wheelDiameterMm * 0.001f);
     // motor "L" do firmware (GPIO0) é a roda DIREITA do robô: L mais rápido → vira à esquerda
-    motors.setSpeeds((_speed + _turnOffset) * stepsPerMeter, (_speed - _turnOffset) * stepsPerMeter);
+    motors.setSpeeds((_wheel + _turnOffset) * stepsPerMeter, (_wheel - _turnOffset) * stepsPerMeter);
 
     cfg.pidOutput = accel;
 }
 
 void BalanceController::resetIntegral() {
     _speed = 0.0f;
+    _ff = 0.0f;
+    _wheel = 0.0f;
     _angleError = 0.0f;
 }

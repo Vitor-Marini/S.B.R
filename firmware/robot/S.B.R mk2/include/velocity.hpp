@@ -9,6 +9,7 @@ public:
     void setTarget(float ms);
     void setTurnRate(float degS);
     float getTarget() { return _targetVelocity; }
+    float getRampedTarget() { return _rampedTarget; }
     float getTurnRate() { return _targetTurnRate; }
     float getEstimated() { return _estimatedVelocity; }
 

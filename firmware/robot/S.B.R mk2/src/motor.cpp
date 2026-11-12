@@ -82,8 +82,17 @@ void MotorManager::_apply(Channel& c) {
 }
 
 void MotorManager::setSpeeds(float left, float right) {
+    _deadlineMs = 0;
     _l.target = left;
     _r.target = right;
+    update();
+}
+
+void MotorManager::setSpeedsTimed(float left, float right, uint32_t ms) {
+    _l.target = left;
+    _r.target = right;
+    _deadlineMs = millis() + ms;
+    if (!_deadlineMs) _deadlineMs = 1;  // 0 significa "sem prazo"
     update();
 }
 
@@ -95,6 +104,11 @@ void MotorManager::update() {
 
     _l.reversed = cfg.motor.leftReversed;
     _r.reversed = cfg.motor.rightReversed;
+
+    if (_deadlineMs && (int32_t)(millis() - _deadlineMs) > 0) {
+        _l.target = _r.target = 0.0f;  // comando remoto expirou
+        _deadlineMs = 0;
+    }
 
     float maxDelta = cfg.motor.maxAccelStepsS2 * dt;
     for (Channel* c : {&_l, &_r}) {
