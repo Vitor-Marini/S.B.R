@@ -6,7 +6,6 @@
 #include "balance.hpp"
 #include "motor.hpp"
 #include "velocity.hpp"
-#include "ds4_controller.hpp"
 #include <Wire.h>
 
 CLI cli;
@@ -190,17 +189,6 @@ void CLI::_processLine(const String& line) {
         int sp = args.indexOf(' ');
         velCtrl.setTarget(args.substring(0, sp > 0 ? sp : args.length()).toFloat());
         velCtrl.setTurnRate(sp > 0 ? args.substring(sp + 1).toFloat() : 0.0f);
-    } else if (command == "pair") {
-        ds4Ctrl.startPairing();
-    } else if (command == "ds4") {
-        term.printf("DS4: %s\n", ds4Ctrl.isConnected() ? "Conectado" : "Desconectado");
-        if (ds4Ctrl.isConnected()) {
-            auto& s = ds4Ctrl.getState();
-            term.printf("  Endereco: %s\n", ds4Ctrl.getAddress().c_str());
-            term.printf("  Stick L: %.2f  Stick R: %.2f\n", s.stickLY, s.stickRX);
-            term.printf("  Botoes: T=%d C=%d X=%d S=%d | PS=%d\n",
-                          s.triangle, s.circle, s.cross, s.square, s.ps);
-        }
     } else if (command == "reset") {
         motors.resetOdometry();
         balance.resetIntegral();
@@ -234,8 +222,6 @@ void CLI::_printHelp() {
     term.println("  load              → Carregar config da flash");
     term.println("  reset             → Resetar odometria e integrais");
     term.println("  wifi [<rede> <senha>] → Status / salvar rede de casa (UDP 5555, sbr.local)");
-    term.println("  pair              → Escanear e conectar DS4 via BLE");
-    term.println("  ds4               → Status do controle DS4");
     term.println("  help              → Este menu");
     term.println("----------------\n");
 }

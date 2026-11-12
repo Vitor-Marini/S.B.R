@@ -57,7 +57,6 @@ bool ConfigManager::load() {
 
     if (!doc["max_velocity"].isNull()) maxVelocity = doc["max_velocity"].as<float>();
     if (!doc["max_turn_rate"].isNull()) maxTurnRate = doc["max_turn_rate"].as<float>();
-    if (doc["ble_enabled"].is<bool>()) bleEnabled = doc["ble_enabled"].as<bool>();
     if (!doc["wifi_ssid"].isNull()) wifiSsid = doc["wifi_ssid"].as<String>();
     if (!doc["wifi_pass"].isNull()) wifiPass = doc["wifi_pass"].as<String>();
 
@@ -100,7 +99,6 @@ bool ConfigManager::save() {
 
     doc["max_velocity"] = maxVelocity;
     doc["max_turn_rate"] = maxTurnRate;
-    doc["ble_enabled"] = bleEnabled;
     doc["wifi_ssid"] = wifiSsid;
     doc["wifi_pass"] = wifiPass;
 
@@ -131,7 +129,6 @@ void ConfigManager::print() {
     term.printf("  PI: Kp %.2f  Ki %.2f (° por m/s)\n", velocityPid.kp, velocityPid.ki);
     term.printf("  Max V:  %.2f m/s\n", maxVelocity);
     term.printf("  Max T:  %.1f °/s\n", maxTurnRate);
-    term.printf("  BLE:    %s\n", bleEnabled ? "ON" : "OFF");
     term.print ("--- Filter ---\n");
     term.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);
     term.printf("  Comp alpha: %.3f\n", filter.complementaryAlpha);

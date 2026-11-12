@@ -8,7 +8,7 @@ VelocityController velCtrl;
 void VelocityController::begin() {
 }
 
-// Toda fonte de controle (CLI/PC, web, BLE, DS4) passa por aqui e renova o watchdog.
+// Toda fonte de controle (CLI/USB, UDP/WiFi: teclado, DS4 no PC, scripts) passa por aqui e renova o watchdog.
 void VelocityController::setTarget(float ms) {
     // metade do vmax: o equilíbrio precisa de folga acima da velocidade de cruzeiro
     float lim = 0.5f * cfg.maxVelocity;

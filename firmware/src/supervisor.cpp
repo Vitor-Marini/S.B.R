@@ -5,12 +5,9 @@
 #include "balance.hpp"
 #include "motor.hpp"
 #include "velocity.hpp"
-#include "ble_gamepad.hpp"
 
 Supervisor supervisor;
 
-void requestBalanceStart() { supervisor.requestStart(); }
-void requestBalanceStop() { supervisor.requestStop(); }
 
 void Supervisor::begin() {
     _setState(STATE_INIT);

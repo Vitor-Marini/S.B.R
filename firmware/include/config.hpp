@@ -38,8 +38,6 @@ public:
     float maxVelocity = 0.8f;
     float maxTurnRate = 180.0f;
 
-    bool bleEnabled = true;
-
     String wifiSsid;  // rede de casa; salva só na flash (comando `wifi`), nunca no git
     String wifiPass;
 
