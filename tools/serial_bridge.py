@@ -72,10 +72,12 @@ class UdpLink:
     """Robô via WiFi (UDP 5555) com a mesma interface read/write da serial."""
 
     def __init__(self, host):
+        self.host = host
         self.addr = (socket.gethostbyname(host), 5555)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(0.1)
         self.last_hello = 0.0
+        self.last_rx = time.time()
 
     def write(self, data):
         self.sock.sendto(data, self.addr)
@@ -84,9 +86,19 @@ class UdpLink:
         # o robô responde para quem mandou o último pacote: "\n" periódico mantém o registro
         if time.time() - self.last_hello > 2:
             self.last_hello = time.time()
-            self.write(b"\n")
+            if time.time() - self.last_rx > 5:  # sumiu: o robô pode ter voltado com outro IP
+                try:
+                    self.addr = (socket.gethostbyname(self.host), 5555)
+                except OSError:
+                    pass
+            try:
+                self.write(b"\n")
+            except OSError:
+                pass  # rede fora: continua tentando
         try:
-            return self.sock.recv(65536)
+            data = self.sock.recv(65536)
+            self.last_rx = time.time()
+            return data
         except socket.timeout:
             return b""
 
@@ -212,14 +224,13 @@ def main():
                 ser = serial.Serial(resolve_port(), 115200, timeout=0.1)
             print(f"[conectado em {getattr(ser, 'port', PORT)}]", flush=True)
             buf = b""
-            connected_at = time.time()
-            asked = False
+            asked = time.time()
             while True:
-                # firmware antigo só tem `stream` liga/desliga: só pede se nada chegou desde a conexão
-                if AUTO_STREAM and not asked and time.time() - connected_at > 1.5:
-                    asked = True
-                    if last_stream < connected_at:
-                        send_serial(b"stream on\n")
+                # sem dados há 3 s (robô reiniciou e voltou com o stream desligado, ou acabou de conectar):
+                # pede de novo; `stream on` é seguro de repetir. O log continua no mesmo arquivo.
+                if AUTO_STREAM and time.time() - max(last_stream, asked) > 3:
+                    asked = time.time()
+                    send_serial(b"stream on\n")
                 buf += ser.read(4096)
                 *lines, buf = buf.split(b"\n")
                 for l in lines:
