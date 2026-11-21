@@ -32,6 +32,13 @@ tools/sbr.sh            # via WiFi (sbr.local); tools/sbr.sh usb = pelo cabo
 python3 tools/gamepad.py   # em outro terminal: DS4 conectado no PC (USB ou Bluetooth)
 ```
 
+Tudo que passa pelo `stream` é gravado pela ponte em `logs/AAAAMMDD-HHMMSS.csv` (um arquivo por vez que a
+ponte é aberta, enquanto ela estiver aberta). Depois de usar:
+
+```bash
+python3 tools/analisar_log.py        # resume o log mais recente: starts, andar, curvas, quedas
+```
+
 Abre o PlotJuggler com o layout `tools/sbr_layout.xml` (abas *Equilibrio* e *Saude*) já ouvindo
 a UDP 9870, liga o `stream` e deixa este terminal como terminal do robô.
 A rede WiFi é salva uma vez pela USB com `wifi <rede> <senha>` (2,4 GHz, nome sem espaços).
