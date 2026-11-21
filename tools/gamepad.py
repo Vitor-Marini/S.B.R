@@ -119,10 +119,10 @@ def main():
             if now - last >= PERIOD:
                 last = now
                 if motor_mode:
-                    # firmware "L" (GPIO0) é a roda DIREITA: analógico direito → L, esquerdo → R
+                    # firmware "L" (GPIO0) é a roda ESQUERDA: analógico esquerdo → L, direito → R
                     left = -shape(axes.get(AXIS_LY, 0)) * MOTOR_MAX
                     right = -shape(axes.get(AXIS_RY, 0)) * MOTOR_MAX
-                    active, msg = bool(left or right), f"motors {right:.0f} {left:.0f}\n"
+                    active, msg = bool(left or right), f"motors {left:.0f} {right:.0f}\n"
                 else:
                     v = -shape(axes.get(AXIS_LY, 0)) * LEVELS[level]   # pra cima = negativo no Linux
                     w = -shape(axes.get(AXIS_RX, 0)) * W_MAX           # pra direita = virar à direita (w < 0)

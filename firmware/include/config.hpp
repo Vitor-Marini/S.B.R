@@ -13,8 +13,8 @@ struct MotorParams {
     float stepsPerRev = 3200.0f;          // NEMA17 200 passos × 1/16 (M2 em nível alto)
     float wheelDiameterMm = 74.0f;
     float maxAccelStepsS2 = 400000.0f;    // só trava de segurança; quem acelera é o controle
-    bool leftReversed = false;
-    bool rightReversed = false;
+    bool leftReversed = true;    // montagem de 2026-11-21: os dois motores invertidos
+    bool rightReversed = true;
 };
 
 // Loop de controle fixo: IMU, PID e supervisor rodam juntos nesta taxa.
@@ -44,7 +44,7 @@ public:
     MotorParams motor;
     FilterParams filter;
 
-    float setpoint = 6.8f;  // ponto de equilíbrio medido (montagem atual)
+    float setpoint = -0.9f;  // ponto de equilíbrio medido (chassi rígido, IMU sobre os motores, 2026-11-21)
     float failsafeAngle = 45.0f;
 
     float pitchAngle = 0.0f;

@@ -39,10 +39,15 @@ void VelocityController::update() {
     float maxStep = TARGET_ACCEL * dt;
     _rampedTarget += constrain(_targetVelocity - _rampedTarget, -maxStep, maxStep);
     float velError = _rampedTarget - _estimatedVelocity;
-    // integral só parado: corrige deriva; andando, quem leva é o feedforward + P
-    // (senão ele "cobra" a distância não percorrida e o robô dá tranco ao parar)
-    if (_rampedTarget == 0.0f) _velIntegral += velError * dt;
-    _velIntegral = constrain(_velIntegral, -0.5f, 0.5f);
+    // integral sempre ativo: é o que vence a resistência à rolagem (com o centro de massa baixo,
+    // o P sozinho inclina pouco demais) e um puxão constante. Limite no TERMO, em graus (anti-windup).
+    _velIntegral += velError * dt;
+    if (cfg.velocityPid.ki > 0.0f) {
+        float lim = I_MAX_DEG / cfg.velocityPid.ki;
+        _velIntegral = constrain(_velIntegral, -lim, lim);
+    } else {
+        _velIntegral = 0.0f;
+    }
     _angleOffset = cfg.velocityPid.kp * velError + cfg.velocityPid.ki * _velIntegral;
     _angleOffset = constrain(_angleOffset, -5.0f, 5.0f);
 

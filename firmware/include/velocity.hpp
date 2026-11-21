@@ -30,6 +30,7 @@ private:
     uint32_t _lastCmdMs = 0;
     float _rampedTarget = 0.0f;
     static constexpr float TARGET_ACCEL = 0.3f;  // m/s²
+    static constexpr float I_MAX_DEG = 2.0f;     // máximo de inclinação que o integral pode pedir
     static const uint32_t CMD_TIMEOUT_MS = 500;
 };
 

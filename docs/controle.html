@@ -524,7 +524,7 @@ e ruído do sensor. Serve pra intuição, não pra copiar ganhos.</p>
 <tr><th>Mecanismo</th><th>Problema que evita</th><th>Onde</th></tr>
 <tr><td><b>Saturação</b> (<code>vmax</code>)</td><td>Pedir mais velocidade que o motor dá.</td><td><code>balance.cpp</code></td></tr>
 <tr><td><b>Folga</b>: alvo ≤ vmax/2</td><td>Andando no limite, não sobra velocidade pra corrigir uma inclinação: ele cai. Vimos isso no empurrão forte.</td><td><code>velocity.cpp</code></td></tr>
-<tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). O integral tem limite e congela durante o <code>drive</code>.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). O termo integral é limitado a ±2° de inclinação. (Congelar o integral ao andar foi um erro: é ele que vence a resistência à rolagem.)</td><td><code>velocity.cpp</code></td></tr>
 <tr><td><b>Rampa</b> (0,3 m/s²)</td><td>Degrau no alvo vira tranco (lembre da fase não mínima).</td><td><code>velocity.cpp</code></td></tr>
 <tr><td><b>Watchdog</b> (0,5 s)</td><td>Controle caiu (WiFi, programa travou): para sozinho e fica equilibrando.</td><td><code>velocity.cpp</code>, <code>motor.cpp</code></td></tr>
 <tr><td><b>Failsafe</b> (45°)</td><td>Já caiu: desliga os motores.</td><td><code>supervisor.cpp</code></td></tr>
@@ -606,7 +606,9 @@ function step(s) {
   const pitch = s.th * deg, rate = s.thd * deg;                         // "sensor" ideal
   s.vramp += Math.max(-0.3 * DT, Math.min(0.3 * DT, s.vt - s.vramp));    // rampa 0,3 m/s²
   const verr = s.vramp - s.v;
-  if (s.vramp === 0) s.vint = Math.max(-0.5, Math.min(0.5, s.vint + verr * DT));
+  s.vint += verr * DT;                                                   // integral sempre ativo...
+  if (p.vki > 0) s.vint = Math.max(-2 / p.vki, Math.min(2 / p.vki, s.vint)); // ...limitado a ±2° (anti-windup)
+  else s.vint = 0;
   const voff = p.mode === 'cascata' ? Math.max(-5, Math.min(5, p.vkp * verr + p.vki * s.vint)) : 0;
   const err = pitch - voff;                                              // setpoint = 0 no modelo
   let cmd;

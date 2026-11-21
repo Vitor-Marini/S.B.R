@@ -132,7 +132,7 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 |---------|-----------|
 | `start` / `stop` | liga / desliga o equilíbrio |
 | `drive <m/s> <°/s>` | andar/virar (+ = frente / esquerda). Vale por 0,5 s: repita a 10–20 Hz |
-| `motors <L> <R>` | teste remoto dos motores em passos/s (só IDLE). Vale por 0,5 s. "L" do firmware = roda **direita** |
+| `motors <L> <R>` | teste remoto dos motores em passos/s (só IDLE). Vale por 0,5 s. "L" do firmware = roda **esquerda** |
 | `state` | estado atual |
 | `status` | config completa + telemetria |
 | `angle` | pitch, ângulo do acelerômetro, gyro integrado, taxa do loop (deve ser 200 Hz) |
@@ -152,7 +152,7 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 | `sp` | 6.8 | setpoint (°): ângulo do ponto de equilíbrio |
 | `vmax` | 0.8 | limite de velocidade da roda (m/s) |
 | `vkp` | 4 | malha de velocidade: ° de inclinação por m/s de erro. Amortece o "vai e volta" depois de um empurrão |
-| `vki` | 1 | integral da velocidade: tira a deriva e faz voltar ao lugar |
+| `vki` | 1 | integral da velocidade (testar 2 com as rodas firmes): vence a resistência à rolagem ao andar, tira a deriva e resiste a puxão (limitado a ±2°) |
 | `ykp` | 0.001 | curva: (m/s de diferença entre rodas) por °/s de erro |
 | `yki` | 0.01 | integral da curva |
 | `alpha` | 0.995 | filtro: quanto confia no gyro (0,98 = mais acelerômetro) |

@@ -13,7 +13,7 @@ O histórico de como cada coisa foi descoberta está em [diario.md](diario.md).
 | Drivers | 2× DRV8825, **microstepping 1/16** (3200 passos/volta) |
 | Rodas | PLA impresso, diâmetro 74 mm |
 | Bateria | Makita BL1016 (10,8–12 V); a ESP é alimentada por um DC-DC a partir dela |
-| Chassi | peças em `hardware/3d-models/` |
+| Chassi | rígido desde 2026-11-21 (viga entre as placas laterais); peças em `hardware/3d-models/` |
 
 ## Pinagem
 
@@ -21,7 +21,7 @@ O histórico de como cada coisa foi descoberta está em [diario.md](diario.md).
 |-------|----------|------------|
 | SDA (MPU) | GPIO 8 | |
 | SCL (MPU) | GPIO 9 | |
-| STEP motor "L" | GPIO 0 | **"L" do firmware é a roda DIREITA** do robô (olhando pra frente) |
+| STEP motor "L" | GPIO 0 | **"L" do firmware é a roda ESQUERDA** do robô (olhando pra frente; medido 2026-11-21) |
 | DIR motor "L" | GPIO 1 | |
 | DIR motor "R" | GPIO 2 | |
 | STEP motor "R" | GPIO 3 | |
@@ -38,25 +38,57 @@ Microstepping do DRV8825:
 
 ## Convenções verificadas no robô
 
-- **Pitch positivo = inclinado pra frente**, o lado pra onde as rodas andam com comando positivo.
+- **Frente = lado da chave liga/desliga** (−Y no CAD). Pitch positivo = inclinado pra lá, e comando
+  positivo nas rodas anda pra lá. Conferir com essa referência física, não com "frente" de memória.
 - Eixo de queda: acelerômetro X/Z + **gyro Y** (MPU deitado, chip pra cima).
 - **Gyro Z positivo = girar pra esquerda** (anti-horário visto de cima).
-- `motor both +N` faz as duas rodas andarem pra frente (`left_reversed`/`right_reversed` = falso).
+- Desde a remontagem de 2026-11-21 os dois motores estão invertidos: `tune lrev 1`, `tune rrev 1`
+  (`motor both +N` anda pra frente). Se remontar e o robô "acelerar e cair", confira esse sinal primeiro.
+- **"L" do firmware (GPIO0) = roda esquerda** olhando pra frente. Medido girando no lugar: `motors 1600 -1600`
+  → giro horário (yaw cai). Se a curva "girar sem parar", esse mapeamento mudou: inverta o sinal em `balance.cpp`.
 - Com o MPU nessa orientação, a configuração `regs` esperada é `75=68 6B=01 19=00 1A=03 1B=08 1C=10`.
 
 ## O que falta melhorar (por prioridade)
 
-1. **Chassi rígido.** Hoje ele flexiona: o corpo/IMU inclina sem o peso sair de cima do eixo, e por isso
-   o robô não anda pra frente/trás (ver diário, 2026-11-10). Bateria, motores e MPU numa estrutura que não ceda.
-2. **MPU firme e longe dos drivers.** Parafuso/espaçador ou cola dura, fios presos ao chassi.
-   Perto dos drivers ele chega a 46 °C e o bias do gyro deriva (~0,14 °/s); faça `cal` depois de aquecer.
+1. ✅ **Chassi rígido** (2026-11-21): viga entre as placas laterais; antes ele flexionava e o robô não andava.
+2. ✅ **MPU baixo e rígido** (2026-11-21): na prateleira logo acima dos motores (~37 mm acima do eixo), mesma
+   orientação de antes (eixos conferidos inclinando). Setpoint remedido: −0,9°. Ainda vale afastar dos drivers
+   (calor → deriva do gyro): faça `cal` depois de aquecer.
 3. **Alimentação.** Já houve reset do MPU e reboots da ESP por mau contato; capacitor (100–470 µF)
    perto da ESP/MPU e conectores firmes. Bateria fraca derruba os motores.
 4. **Monitor de bateria.** Divisor (ex.: 100 kΩ + 33 kΩ → ~3,1 V a 12,6 V) num pino ADC livre.
 5. **ENABLE num GPIO**, pra desligar os motores em IDLE/FAULT (sem chiado e sem esquentar).
 6. **Vref** dos drivers: ~0,6–0,7 V pra NEMA17 de ~1,2–1,5 A (nunca medido).
-7. Opcional: **peso mais alto** (ex.: bateria em cima). Pêndulo mais alto cai mais devagar e tolera mais
-   atraso — ver `docs/controle.html`, seção 13.
+7. ✅ **Bateria no topo** (2026-11-21). Mesmo assim o centro de massa do corpo fica só ~37 mm acima do eixo.
+
+## Parâmetros físicos (modelo 3D do mk2, calibrado com a balança)
+
+| Grandeza | Valor |
+|---|---|
+| Massa total / do corpo (sem rodas) | 1,06 kg / 1,02 kg |
+| Centro de massa do corpo acima do eixo (d) | 37 mm (±15 %) |
+| Inércia do corpo em torno do eixo (I) | 3,93e-3 kg·m² |
+| **Comprimento efetivo do pêndulo L = I/(m·d)** | **≈ 0,10 m** (é o L de `docs/controle.html`) |
+| Raio da roda / bitola (centro a centro) | 37,5 mm / 150 mm |
+| Chip do MPU acima do eixo | 37 mm |
+
+Fonte: modelo Fusion "S.B.R mk2" v4, massas calibradas com o peso real (precisão: massa ±5 %, CG e inércias ±15 %).
+O firmware usa roda de 74 mm (medida); o CAD diz 75 mm (1 % de diferença na velocidade).
+
+## Onde montar o IMU
+
+- O **gyro** lê o mesmo em qualquer ponto de um corpo **rígido**: só a rigidez da montagem importa.
+- O **acelerômetro** mede gravidade + a aceleração do ponto onde está. Num modelo linear do pêndulo
+  (L = comprimento efetivo, a = aceleração da roda, h = altura do sensor acima do eixo):
+
+  `leitura_x ≈ a·(1 − h/L) + g·θ·(1 + h/L)`
+
+  - **No eixo (h = 0):** a aceleração da roda aparece inteira, mas ela é **conhecida** (stepper: comandada =
+    real), então o firmware pode subtraí-la. Montagem recomendada, junto com rigidez.
+  - **No "centro de percussão" (h ≈ L):** a aceleração da roda se cancela, mas o ângulo aparece em dobro,
+    L é desconhecido e muda com a posição das baterias, e lá em cima o chassi flexiona. Na prática, não compensa.
+- O filtro complementar (α = 0,995) confia no gyro abaixo de ~1 s, então o acelerômetro só pesa nos efeitos lentos
+  (andar acelerando, deriva).
 
 ## Limitação importante
 

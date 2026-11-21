@@ -141,3 +141,21 @@ Confirmado OK: os dois motores giram suave a 500 passos/s; com o mesmo comando, 
 - Teste de rigidez (chassi seguro): placa do MPU flexiona até ~0,8° sob o dedo — pouco. **O chassi deforma** (confirmado pelo usuário): o corpo/IMU inclina sem o centro de massa sair de cima do eixo → inclinar não gera aceleração, então nem a malha de velocidade nem o feedforward fazem andar.
 - Bloqueio de hardware: chassi rígido (bateria, motores e MPU numa estrutura que não flexione). Depois: `cal` quente, remedir `sp`, `drive 0.1`. Peso no topo é opcional (deixa o pêndulo mais lento e tolerante).
 - Gyro deriva ~0,14°/s quando o MPU esquenta (33 → 46 °C, perto dos drivers): recalibrar quente ou afastar.
+
+---
+
+## 2026-11-21 — hardware novo (chassi rígido, IMU sobre os motores, bateria no topo)
+
+- MPU saudável depois da remontagem (regs ok, 0 falhas I2C). Parâmetros do CAD: CG do corpo 37 mm acima do eixo,
+  L efetivo = I/(m·d) ≈ 0,10 m. Setpoint remedido: **−0,9°** (robô na vertical, bate com o CAD).
+- "Acelera e cai": os **dois motores ficaram invertidos** na remontagem → `tune lrev 1`, `tune rrev 1`
+  (comando novo). Frente = lado da chave liga/desliga (referência física; o teste "pra frente" de memória enganou).
+- "Gira sem parar": nessa montagem o motor "L" é a roda **esquerda** (medido girando no lugar: `motors 1600 -1600`
+  → horário) → sinal da curva invertido em `balance.cpp`; modo motores do gamepad corrigido.
+- Resultado: parado com desvio de **0,10°**; curva segue 30 °/s exatos. Andar ainda não: com o integral da
+  velocidade **congelado ao andar** (mudança minha de 2026-11-10) sobrava só o P (0,4°), pouco pra vencer a
+  resistência à rolagem com CG tão baixo. `vkp` 10 andou devagar mas oscilou → voltou a 4.
+- Correção: integral sempre ativo, limitado a ±2° no termo (`I_MAX_DEG`); `vki` 2.
+- Depois do teste com `vkp` 10 (sacudiu forte), parado passou a oscilar a **3,4 Hz, ±3–4°** — igual com `vki` 0
+  e 1, então não é o integral. Causa: **as duas rodas com folga no eixo** (mesmo sintoma da folga de 2026-11-08).
+  Pendente: rodas novas presas direto no eixo; depois testar `drive` com o integral corrigido (`vki` 1, depois 2).
