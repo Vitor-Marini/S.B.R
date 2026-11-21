@@ -19,6 +19,7 @@ Uso:
   python3 tools/gamepad.py --show     # só mostra eixos/botões, p/ conferir o mapeamento
 """
 import glob
+import re
 import os
 import socket
 import struct
@@ -28,10 +29,12 @@ import time
 # mapeamento do DS4 no driver hid-playstation do Linux (confira com --show)
 AXIS_LY, AXIS_RX, AXIS_RY = 1, 3, 4
 BTN_CROSS, BTN_CIRCLE, BTN_TRIANGLE, BTN_L1, BTN_R1, BTN_OPTIONS = 0, 1, 2, 4, 5, 9
+STATE_NAMES = {0: "INIT", 1: "CALIBRANDO (deixe parado)", 2: "IDLE", 3: "STARTING (segure na vertical)",
+               4: "ACTIVE (equilibrando)", 6: "FAULT (caiu)"}
 MOTOR_MAX = 3200.0  # passos/s no analógico todo (1 volta/s em 1/16)
 
 LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.65]  # m/s no analógico todo pra frente (firmware limita a vmax/2)
-W_MAX = 90.0                   # °/s no analógico todo pro lado
+W_MAX = 30.0                   # °/s no analógico todo pro lado (60 °/s ainda desestabiliza; ver diário)
 DEADZONE = 0.12
 PERIOD = 0.05                  # 20 Hz
 
@@ -86,7 +89,7 @@ def main():
 
     sock = socket.create_connection(("127.0.0.1", 5555))
     sock.setblocking(False)
-    axes, level, last, sent_nonzero, motor_mode = {}, 1, 0.0, False, False
+    axes, level, last, sent_nonzero, motor_mode, robot_state = {}, 1, 0.0, False, False, None
     print("Controlando. △ start, ○ para de andar, ✕ stop, L1/R1 velocidade, Options modo motores. Ctrl+C sai.")
     try:
         while True:
@@ -133,7 +136,12 @@ def main():
                     sock.send(msg.encode())
                 sent_nonzero = active
                 try:
-                    sock.recv(65536)  # descarta o que a ponte manda
+                    # mostra quando o estado do robô muda (ex.: △ não engatou porque está em FAULT)
+                    for m in re.finditer(rb">state:(\d+)", sock.recv(65536)):
+                        st = int(m.group(1))
+                        if st != robot_state:
+                            robot_state = st
+                            print(f"\rrobô: {STATE_NAMES.get(st, st)}                    ")
                 except BlockingIOError:
                     pass
             time.sleep(0.005)

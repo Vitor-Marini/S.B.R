@@ -9,10 +9,12 @@
 
 Uso: ~/.platformio/penv/bin/python tools/serial_bridge.py [auto | /dev/ttyACMx]
      ~/.platformio/penv/bin/python tools/serial_bridge.py udp:sbr.local   (sem cabo, via WiFi)
-Reconecta sozinho se o cabo cair.
+Reconecta sozinho se o cabo cair. Grava todo o `stream` em logs/AAAAMMDD-HHMMSS.csv (--no-log desliga).
 """
+import csv
 import glob
 import json
+import os
 import socket
 import sys
 import threading
@@ -43,7 +45,28 @@ frame = {}         # quadro do stream sendo montado
 def flush_frame():
     if frame:
         udp.sendto(json.dumps(frame).encode(), ("127.0.0.1", UDP_PORT))
+        log_frame(frame)
         frame.clear()
+
+
+# log automático: um CSV por sessão em logs/ (na raiz do repo), com tudo que vem do `stream`
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+log_file = log_writer = None
+
+
+def log_frame(f):
+    global log_file, log_writer
+    if "--no-log" in sys.argv:
+        return
+    if log_writer is None:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        path = os.path.join(LOG_DIR, time.strftime("%Y%m%d-%H%M%S") + ".csv")
+        log_file = open(path, "w", newline="")
+        log_writer = csv.DictWriter(log_file, fieldnames=["t"] + list(f), extrasaction="ignore")
+        log_writer.writeheader()
+        print(f"[gravando log em {os.path.relpath(path)}]", flush=True)
+    log_writer.writerow({"t": f"{time.time():.3f}", **f})
+    log_file.flush()
 
 class UdpLink:
     """Robô via WiFi (UDP 5555) com a mesma interface read/write da serial."""
@@ -111,6 +134,7 @@ def _selftest():
     time.sleep(0.1)
     assert time.time() - t0 < 5, "ponte travou"
     assert slow_a in clients, "cliente que só escreve foi derrubado"
+    sys.argv.append("--no-log")  # o resto do teste não deve criar arquivo em logs/
     assert good_a in clients and got > 1_000_000, "cliente bom parou de receber"
     rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     rx.bind(("127.0.0.1", 0))

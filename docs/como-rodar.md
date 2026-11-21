@@ -149,10 +149,10 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 |-------|-------|------------------|
 | `kp` | 0.35 | (m/s²) por grau. Força para voltar ao setpoint. Mínimo físico ≈ 0,17 |
 | `kd` | 0.03 | (m/s²) por °/s. Amortece. **Baixar piorou** (testado) |
-| `sp` | 6.8 | setpoint (°): ângulo do ponto de equilíbrio |
+| `sp` | -1.3 | setpoint (°): ponto de equilíbrio. **Se ajusta sozinho** equilibrando parado e é salvo ao parar |
 | `vmax` | 0.8 | limite de velocidade da roda (m/s) |
 | `vkp` | 4 | malha de velocidade: ° de inclinação por m/s de erro. Amortece o "vai e volta" depois de um empurrão |
-| `vki` | 1 | integral da velocidade (testar 2 com as rodas firmes): vence a resistência à rolagem ao andar, tira a deriva e resiste a puxão (limitado a ±2°) |
+| `vki` | 3 | integral da velocidade, **só andando** (no mouse pad precisa de ~1° pra arrancar): vence a resistência à rolagem (limitado a ±2°; se esvazia ao parar) |
 | `ykp` | 0.001 | curva: (m/s de diferença entre rodas) por °/s de erro |
 | `yki` | 0.01 | integral da curva |
 | `alpha` | 0.995 | filtro: quanto confia no gyro (0,98 = mais acelerômetro) |

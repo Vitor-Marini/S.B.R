@@ -524,8 +524,9 @@ e ruído do sensor. Serve pra intuição, não pra copiar ganhos.</p>
 <tr><th>Mecanismo</th><th>Problema que evita</th><th>Onde</th></tr>
 <tr><td><b>Saturação</b> (<code>vmax</code>)</td><td>Pedir mais velocidade que o motor dá.</td><td><code>balance.cpp</code></td></tr>
 <tr><td><b>Folga</b>: alvo ≤ vmax/2</td><td>Andando no limite, não sobra velocidade pra corrigir uma inclinação: ele cai. Vimos isso no empurrão forte.</td><td><code>velocity.cpp</code></td></tr>
-<tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). O termo integral é limitado a ±2° de inclinação. (Congelar o integral ao andar foi um erro: é ele que vence a resistência à rolagem.)</td><td><code>velocity.cpp</code></td></tr>
-<tr><td><b>Rampa</b> (0,3 m/s²)</td><td>Degrau no alvo vira tranco (lembre da fase não mínima).</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). Parado, a malha de velocidade usa só o P (sem memória de posição: empurrou, freia e fica). O integral só existe andando (vence a resistência à rolagem, limitado a ±2°) e se esvazia em ~0,2 s ao parar.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Calibração e zero do gyro</b></td><td>Calibrar com o robô se mexendo deixa um erro de zero (16 °/s numa queda!). A calibração é descartada se o gyro variar, e em IDLE, quando o acelerômetro diz que está parado, o zero é corrigido sozinho.</td><td><code>imu_manager.cpp</code></td></tr>
+<tr><td><b>Rampa</b> (0,6 m/s²)</td><td>Degrau no alvo vira tranco (lembre da fase não mínima).</td><td><code>velocity.cpp</code></td></tr>
 <tr><td><b>Watchdog</b> (0,5 s)</td><td>Controle caiu (WiFi, programa travou): para sozinho e fica equilibrando.</td><td><code>velocity.cpp</code>, <code>motor.cpp</code></td></tr>
 <tr><td><b>Failsafe</b> (45°)</td><td>Já caiu: desliga os motores.</td><td><code>supervisor.cpp</code></td></tr>
 </table>
@@ -596,21 +597,22 @@ várias vezes. Depois um pouco de <code>vki</code> pra tirar a deriva lenta.</li
 const G = 9.81, DT = 0.005; // 200 Hz, como o tick do firmware
 
 function newSim(p) {
-  return { p, th: 0, thd: 0, x: 0, v: 0, vbal: 0, vint: 0, vt: 0, vramp: 0, queue: [], t: 0, fallen: false };
+  return { p, th: 0, thd: 0, x: 0, v: 0, vbal: 0, vint: 0, vt: 0, vramp: 0, sp: 0, queue: [], t: 0, fallen: false };
 }
 
 function step(s) {
   const p = s.p;
   if (s.fallen) return;
   const deg = 180 / Math.PI;
-  const pitch = s.th * deg, rate = s.thd * deg;                         // "sensor" ideal
-  s.vramp += Math.max(-0.3 * DT, Math.min(0.3 * DT, s.vt - s.vramp));    // rampa 0,3 m/s²
+  const pitch = s.th * deg + (p.spErr || 0), rate = s.thd * deg;       // sensor (spErr: setpoint inicial errado)
+  s.vramp += Math.max(-0.6 * DT, Math.min(0.6 * DT, s.vt - s.vramp));    // rampa 0,6 m/s²
   const verr = s.vramp - s.v;
-  s.vint += verr * DT;                                                   // integral sempre ativo...
-  if (p.vki > 0) s.vint = Math.max(-2 / p.vki, Math.min(2 / p.vki, s.vint)); // ...limitado a ±2° (anti-windup)
-  else s.vint = 0;
+  const driving = s.vramp !== 0;
+  if (driving) s.vint += verr * DT;                                      // integral só andando...
+  else s.vint -= s.vint * DT / 0.2;                                      // ...e se esvazia ao parar
+  if (p.vki > 0) s.vint = Math.max(-2 / p.vki, Math.min(2 / p.vki, s.vint)); else s.vint = 0;
   const voff = p.mode === 'cascata' ? Math.max(-5, Math.min(5, p.vkp * verr + p.vki * s.vint)) : 0;
-  const err = pitch - voff;                                              // setpoint = 0 no modelo
+  const err = pitch - (s.sp + voff);
   let cmd;
   if (p.mode === 'pd-velocidade') {
     cmd = Math.max(-p.vmax, Math.min(p.vmax, (p.kp * err + p.kd * rate) * 0.1)); // errado de propósito

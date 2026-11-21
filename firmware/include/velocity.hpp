@@ -29,7 +29,10 @@ private:
     float _estimatedVelocity = 0.0f;
     uint32_t _lastCmdMs = 0;
     float _rampedTarget = 0.0f;
-    static constexpr float TARGET_ACCEL = 0.3f;  // m/s²
+    float _rampedTurn = 0.0f;
+    static constexpr float TARGET_ACCEL = 0.6f;  // m/s² (rampa de arrancada e frenagem)
+    static constexpr float TURN_ACCEL = 240.0f;  // °/s² (0 → 60 °/s em 0,25 s)
+    static constexpr float I_DECAY_S = 0.2f;     // s: integral se esvazia ao parar de andar (mais lento = demora a parar)
     static constexpr float I_MAX_DEG = 2.0f;     // máximo de inclinação que o integral pode pedir
     static const uint32_t CMD_TIMEOUT_MS = 500;
 };

@@ -10,8 +10,9 @@
 class IMUManager {
 public:
     bool begin();
-    void calibrateGyro(int samples = 500);
+    bool calibrateGyro(int samples = 500);  // false se o robô se mexeu (zero não alterado)
     void read();  // chamar exatamente a cada CONTROL_DT
+    void trackGyroBias();  // só com o robô parado (IDLE)
 
     float getPitch() { return _pitch; }
     float getPitchRate() { return _pitchRate; }
@@ -45,6 +46,7 @@ private:
     float _yawRate = 0.0f;
     float _temp = 0.0f;
 
+    float _accFast = 0.0f, _accSlow = 0.0f, _gRef = 9.81f;
     uint8_t _failStreak = 0;
     uint32_t _failCount = 0;
 

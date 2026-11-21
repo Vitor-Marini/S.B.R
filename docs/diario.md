@@ -159,3 +159,35 @@ Confirmado OK: os dois motores giram suave a 500 passos/s; com o mesmo comando, 
 - Depois do teste com `vkp` 10 (sacudiu forte), parado passou a oscilar a **3,4 Hz, ±3–4°** — igual com `vki` 0
   e 1, então não é o integral. Causa: **as duas rodas com folga no eixo** (mesmo sintoma da folga de 2026-11-08).
   Pendente: rodas novas presas direto no eixo; depois testar `drive` com o integral corrigido (`vki` 1, depois 2).
+
+### 2026-11-21 — rodas novas presas no eixo: sintonia
+
+- Parado: desvio de **0,15°**, sem oscilação (a folga das rodas era a causa). Malha de equilíbrio sem mudanças.
+- Setpoint ajustado pela compensação da malha de velocidade: **−1,3°**.
+- **Primeira vez andando:** `drive 0.1` com o integral sempre ativo. `vki` 1: anda devagar (chega a 0,035 m/s em 5 s).
+  `vki` 3: acelera até 0,18 m/s (passa do alvo) e andou 31 cm até bater na borda do mouse pad (o integral encheu
+  contra a borda e ele caiu — comportamento esperado de um integral travado). Fica `vki` **2**.
+- Próximo: espaço maior (chão) pra testar 0,1–0,2 m/s, ré, empurrão e o DS4.
+
+### 2026-11-21 — comportamento parado, empurrão e joystick
+
+Queixas: cada start se comporta diferente e deriva; empurrado, volta pro lugar e passa; joystick demora a parar;
+girar faz andar. Causas: (1) gyro calibrado no boot com o robô na mão (bias ~0,6 °/s); (2) integral da velocidade
+zerado a cada start (reaprende o setpoint); (3) bug meu: integral só acumulava com erro < 3 cm/s → deriva maior que
+isso nunca era corrigida; (4) integral = memória de posição → volta pro lugar após empurrão.
+Mudanças (validadas no simulador do controle.html antes do robô):
+- parado: malha de velocidade só P (sem memória de posição); integral só andando, esvazia em 0,5 s ao parar;
+- **auto-ajuste do setpoint**: com velocidade estável (aceleração filtrada < 0,15 m/s²), o setpoint segue a inclinação
+  pedida pelo P (τ = 1 s) e é salvo ao parar. Simulado: erro de 1° aprendido em ~2 s com 35 cm de deriva no 1º start;
+- zero do gyro atualizado sozinho em IDLE quando parado (< 3 °/s, τ = 5 s);
+- rampas: velocidade 0,6 m/s², curva 240 °/s²; DS4 limitado a 30 °/s (a 60 °/s ele ainda sai andando/cai — aberto).
+- `gxz` (vazamento do giro no gyro de pitch) medido girando à mão: gy ≈ 0,0068·gz → `gxz` −0,007. Não resolveu a
+  curva a 60 °/s; a causa principal ali ainda é desconhecida.
+- **Auto-ajuste do setpoint removido**: sem travas, aprendia errado a cada queda/segurada (rodas no limite = "velocidade
+  estável") e salvava ao cair — levou o setpoint a −8,8°. Com setpoint e gyro certos, 20 s parado ficou em ±5 mm.
+  Lição: o simulador não tinha quedas nem robô segurado; testar uma mudança por vez no robô.
+- Empurrão: freia e fica onde parou ✅. Andar no chão com `vki` 3 funcionou (arranque ~1,5 s no mouse pad).
+- △ não engatava depois de uma batida: gyro com zero errado de ~16 °/s (recalibrado com o robô na mão após a queda).
+  Correções: calibração descartada se o gyro variar > 4 °/s; zero corrigido em IDLE quando o acelerômetro diz
+  "parado" (corrige erros grandes); △ funciona a partir de FAULT; integral esvazia em 0,2 s; `gamepad.py` mostra o
+  estado do robô; ponte grava logs em `logs/`.

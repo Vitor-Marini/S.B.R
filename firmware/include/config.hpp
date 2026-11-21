@@ -25,6 +25,7 @@ struct FilterParams {
     float complementaryAlpha = 0.995f;  // tau = dt*a/(1-a) ≈ 1 s a 200 Hz
     float accBiasX = 0.0f;             // m/s², medido deitando o robô de frente/costas
     float accBiasZ = 0.0f;
+    float gyroCross = 0.013f;          // parte do giro (gz) que vaza no gyro de pitch; medido girando
 };
 
 class ConfigManager {
@@ -32,7 +33,7 @@ public:
     void begin();
 
     PIDGains anglePid{0.35f, 0.0f, 0.03f};  // kp (m/s²)/°, kd (m/s²)/(°/s); ki não usado
-    PIDGains velocityPid{4.0f, 1.0f, 0.0f};  // ° de offset por m/s de erro de velocidade
+    PIDGains velocityPid{4.0f, 3.0f, 0.0f};  // ° de offset por m/s de erro de velocidade
     PIDGains yawPid{0.001f, 0.01f, 0.0f};  // curva: (m/s) por °/s de erro; kd não usado
 
     float maxVelocity = 0.8f;
@@ -44,7 +45,7 @@ public:
     MotorParams motor;
     FilterParams filter;
 
-    float setpoint = -0.9f;  // ponto de equilíbrio medido (chassi rígido, IMU sobre os motores, 2026-11-21)
+    float setpoint = -1.3f;  // ponto de equilíbrio medido (chassi rígido, IMU sobre os motores, rodas novas)
     float failsafeAngle = 45.0f;
 
     float pitchAngle = 0.0f;

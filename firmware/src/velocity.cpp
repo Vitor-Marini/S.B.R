@@ -39,9 +39,12 @@ void VelocityController::update() {
     float maxStep = TARGET_ACCEL * dt;
     _rampedTarget += constrain(_targetVelocity - _rampedTarget, -maxStep, maxStep);
     float velError = _rampedTarget - _estimatedVelocity;
-    // integral sempre ativo: é o que vence a resistência à rolagem (com o centro de massa baixo,
-    // o P sozinho inclina pouco demais) e um puxão constante. Limite no TERMO, em graus (anti-windup).
-    _velIntegral += velError * dt;
+
+    // Parado: só o P (freia, sem memória de posição: empurrou, para onde estiver).
+    // Andando: + integral, que vence a resistência à rolagem; ao parar, ele se esvazia em ~0,5 s.
+    bool driving = _rampedTarget != 0.0f;
+    if (driving) _velIntegral += velError * dt;
+    else _velIntegral -= _velIntegral * dt / I_DECAY_S;
     if (cfg.velocityPid.ki > 0.0f) {
         float lim = I_MAX_DEG / cfg.velocityPid.ki;
         _velIntegral = constrain(_velIntegral, -lim, lim);
@@ -51,9 +54,13 @@ void VelocityController::update() {
     _angleOffset = cfg.velocityPid.kp * velError + cfg.velocityPid.ki * _velIntegral;
     _angleOffset = constrain(_angleOffset, -5.0f, 5.0f);
 
+
     // === Taxa de curva PI → diferença de velocidade entre rodas (m/s) ===
     // positivo = virar à esquerda (anti-horário visto de cima, gyro Z positivo)
-    float turnError = _targetTurnRate - cfg.yawRate;
+    // rampa no alvo de curva: degrau vira tranco nas rodas e o giro passa do ponto ao parar
+    float turnStep = TURN_ACCEL * dt;
+    _rampedTurn += constrain(_targetTurnRate - _rampedTurn, -turnStep, turnStep);
+    float turnError = _rampedTurn - cfg.yawRate;
     _turnIntegral += turnError * dt;
     _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
     _turnOffset = cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
@@ -71,6 +78,7 @@ float VelocityController::getTurnOffset() {
 void VelocityController::reset() {
     _targetVelocity = 0.0f;
     _rampedTarget = 0.0f;
+    _rampedTurn = 0.0f;
     _targetTurnRate = 0.0f;
     _angleOffset = 0.0f;
     _turnOffset = 0.0f;

@@ -92,13 +92,13 @@ void Supervisor::_runInit() {
 
 void Supervisor::_runCalibrate() {
     motors.stop();  // calibrar com motor vibrando estraga o offset
-    imu.calibrateGyro(500);
-    _setState(STATE_IDLE);
+    if (imu.calibrateGyro(500)) _setState(STATE_IDLE);  // senão tenta de novo no próximo tick
 }
 
 void Supervisor::_runIdle() {
     motors.update();  // rampa do comando 'motor' do CLI
     imu.read();
+    imu.trackGyroBias();
     cfg.pitchAngle = imu.getPitch();
     if (!imu.healthy()) _restartImu();
 }
@@ -183,7 +183,8 @@ void Supervisor::_runFault() {
 }
 
 void Supervisor::requestStart() {
-    if (_state == STATE_IDLE) {
+    // de FAULT também: depois de cair, pegar o robô e dar start sem esperar os 3 s da recuperação
+    if (_state == STATE_IDLE || _state == STATE_FAULT) {
         balance.resetIntegral();
         _setState(STATE_STARTING);
     }

@@ -48,22 +48,30 @@ bool IMUManager::_readRaw(float out[7]) {
     return true;
 }
 
-void IMUManager::calibrateGyro(int samples) {
+bool IMUManager::calibrateGyro(int samples) {
     term.println("Calibrando giroscópio... mantenha o robô parado.");
 
     float sumX = 0.0f, sumY = 0.0f, sumZ = 0.0f, v[7];
+    float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
     int good = 0;
 
     for (int i = 0; i < samples; i++) {
         if (_readRaw(v)) {
             sumX += v[4]; sumY += v[5]; sumZ += v[6];
+            for (int k = 0; k < 3; k++) { lo[k] = min(lo[k], v[4 + k]); hi[k] = max(hi[k], v[4 + k]); }
             good++;
         }
         delay(2);
     }
 
+    // robô se mexendo (na mão, sendo levantado) vira um zero errado: descarta e tenta de novo
+    float spread = max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
     if (good < samples / 2) {
         term.printf("Calibração falhou: só %d de %d leituras. Offsets mantidos.\n", good, samples);
+        return false;
+    } else if (spread > radians(4.0f)) {
+        term.printf("Robô se mexeu durante a calibração (%.1f °/s). Deixe parado; tentando de novo...\n", degrees(spread));
+        return false;
     } else {
         _gyroOffsetX = sumX / good;
         _gyroOffsetY = sumY / good;
@@ -77,8 +85,11 @@ void IMUManager::calibrateGyro(int samples) {
     _failStreak = 0;
     _sample();
     _pitch = _accAngle;
+    _accFast = _accSlow = _accAngle;
+    _gRef = sqrtf(_ax * _ax + _ay * _ay + _az * _az);
     _gyroAngle = 0.0f;
     _yaw = 0.0f;
+    return true;
 }
 
 void IMUManager::_sample() {
@@ -102,8 +113,21 @@ void IMUManager::_sample() {
 
     // eixo de queda medido no robô: inclinar p/ frente → ax sobe, gy fica negativo
     _accAngle = degrees(atan2f(_ax - cfg.filter.accBiasX, _az - cfg.filter.accBiasZ));
-    _pitchRate = -degrees(_gy);
+    // placa/chip nunca perfeitamente alinhados: girar no lugar (gz) vaza no gyro de pitch e vira inclinação falsa
+    _pitchRate = -degrees(_gy + cfg.filter.gyroCross * _gz);
     _yawRate = degrees(_gz);
+}
+
+// Parado em IDLE, o zero do gyro segue o bias (temperatura, calibração ruim). Quem diz "parado" é o
+// acelerômetro (ângulo estável e |a| de repouso), não o gyro: assim corrige até erros grandes de zero.
+void IMUManager::trackGyroBias() {
+    const float k = CONTROL_DT / 1.0f;  // τ = 1 s
+    float amag = sqrtf(_ax * _ax + _ay * _ay + _az * _az);
+    if (fabsf(_accFast - _accSlow) < 0.5f && fabsf(amag - _gRef) < 0.5f) {
+        _gyroOffsetX += _gx * k;
+        _gyroOffsetY += _gy * k;
+        _gyroOffsetZ += _gz * k;
+    }
 }
 
 void IMUManager::read() {
@@ -113,6 +137,8 @@ void IMUManager::read() {
     const float a = cfg.filter.complementaryAlpha;
     _pitch = a * (_pitch + _pitchRate * dt) + (1.0f - a) * _accAngle;
     _gyroAngle += _pitchRate * dt;
+    _accFast += (_accAngle - _accFast) * dt / 0.3f;  // para o detector de "parado" do trackGyroBias
+    _accSlow += (_accAngle - _accSlow) * dt / 2.0f;
 
     _yaw += _yawRate * dt;
     if (_yaw > 180.0f) _yaw -= 360.0f;
