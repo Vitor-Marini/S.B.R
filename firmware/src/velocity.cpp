@@ -73,8 +73,12 @@ void VelocityController::update() {
     // rampa no alvo de curva: degrau vira tranco nas rodas e o giro passa do ponto ao parar
     float turnStep = TURN_ACCEL * dt;
     _rampedTurn += constrain(_targetTurnRate - _rampedTurn, -turnStep, turnStep);
-    float turnError = _rampedTurn - cfg.yawRate;
-    _turnIntegral += turnError * dt;
+    // Sem comando de giro a malha desliga: as rodas recebem a mesma velocidade e, com motor de passo, o
+    // robô não gira. Ligada, ela seguiria o gyro Z, e um erro de zero dele (temperatura) vira giro lento parado.
+    bool turning = _rampedTurn != 0.0f || _targetTurnRate != 0.0f;
+    float turnError = turning ? _rampedTurn - cfg.yawRate : 0.0f;
+    if (turning) _turnIntegral += turnError * dt;
+    else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
     _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
     _turnOffset = cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
     _turnOffset = constrain(_turnOffset, -0.3f, 0.3f);
