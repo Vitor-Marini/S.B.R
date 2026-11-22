@@ -191,3 +191,9 @@ Mudanças (validadas no simulador do controle.html antes do robô):
   Correções: calibração descartada se o gyro variar > 4 °/s; zero corrigido em IDLE quando o acelerômetro diz
   "parado" (corrige erros grandes); △ funciona a partir de FAULT; integral esvazia em 0,2 s; `gamepad.py` mostra o
   estado do robô; ponte grava logs em `logs/`.
+- Log de 19:40 (analisar_log.py): 7 starts engataram (inclusive de FAULT); deriva parado ~6 cm/s (setpoint ~0,3°
+  errado); trechos a 0,8 m/s sem comando = robô levantado ligado. Mudanças: **FAULT se as rodas ficarem no limite
+  por 1 s**; **auto-ajuste do setpoint de volta, com travas** (2 s calmo, |v| < 0,3 m/s, |rate| < 20 °/s,
+  |pitch − sp| < 3°, ±1,5° do valor do start, τ 2,5 s; salvo só num `stop`, descartado em FAULT). Simulado com
+  setpoint errado (0,4° e 1° corrigidos; 2° fora do limite), empurrão, robô segurado a 2° e 5° (FAULT, setpoint
+  intacto), queda (setpoint volta ao do start) e andar.

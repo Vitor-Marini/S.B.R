@@ -525,6 +525,8 @@ e ruído do sensor. Serve pra intuição, não pra copiar ganhos.</p>
 <tr><td><b>Saturação</b> (<code>vmax</code>)</td><td>Pedir mais velocidade que o motor dá.</td><td><code>balance.cpp</code></td></tr>
 <tr><td><b>Folga</b>: alvo ≤ vmax/2</td><td>Andando no limite, não sobra velocidade pra corrigir uma inclinação: ele cai. Vimos isso no empurrão forte.</td><td><code>velocity.cpp</code></td></tr>
 <tr><td><b>Anti-windup</b></td><td>O integral acumulando sem parar enquanto algo trava a saída, e depois soltando tudo de uma vez (tranco). Parado, a malha de velocidade usa só o P (sem memória de posição: empurrou, freia e fica). O integral só existe andando (vence a resistência à rolagem, limitado a ±2°) e se esvazia em ~0,2 s ao parar.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Auto-ajuste do setpoint (com travas)</b></td><td>Setpoint um pouco errado faz derivar. Depois de 2 s calmo (sem comando, devagar, sem girar, perto do setpoint), o setpoint segue a inclinação que o P pede, até ±1,5° do valor do start. Salvo só num <code>stop</code>; numa queda volta ao do start. A primeira versão, sem travas, aprendia errado em quedas.</td><td><code>velocity.cpp</code></td></tr>
+<tr><td><b>Rodas no limite</b></td><td>Levantado com o equilíbrio ligado, ele acelera as rodas até o máximo e dispara ao voltar pro chão. Rodas no limite por 1 s → FAULT.</td><td><code>supervisor.cpp</code></td></tr>
 <tr><td><b>Calibração e zero do gyro</b></td><td>Calibrar com o robô se mexendo deixa um erro de zero (16 °/s numa queda!). A calibração é descartada se o gyro variar, e em IDLE, quando o acelerômetro diz que está parado, o zero é corrigido sozinho.</td><td><code>imu_manager.cpp</code></td></tr>
 <tr><td><b>Rampa</b> (0,6 m/s²)</td><td>Degrau no alvo vira tranco (lembre da fase não mínima).</td><td><code>velocity.cpp</code></td></tr>
 <tr><td><b>Watchdog</b> (0,5 s)</td><td>Controle caiu (WiFi, programa travou): para sozinho e fica equilibrando.</td><td><code>velocity.cpp</code>, <code>motor.cpp</code></td></tr>
@@ -597,7 +599,7 @@ várias vezes. Depois um pouco de <code>vki</code> pra tirar a deriva lenta.</li
 const G = 9.81, DT = 0.005; // 200 Hz, como o tick do firmware
 
 function newSim(p) {
-  return { p, th: 0, thd: 0, x: 0, v: 0, vbal: 0, vint: 0, vt: 0, vramp: 0, sp: 0, queue: [], t: 0, fallen: false };
+  return { p, th: 0, thd: 0, x: 0, v: 0, vbal: 0, vint: 0, vt: 0, vramp: 0, sp: 0, spStart: 0, calm: 0, sat: 0, queue: [], t: 0, fallen: false };
 }
 
 function step(s) {
@@ -612,6 +614,10 @@ function step(s) {
   else s.vint -= s.vint * DT / 0.2;                                      // ...e se esvazia ao parar
   if (p.vki > 0) s.vint = Math.max(-2 / p.vki, Math.min(2 / p.vki, s.vint)); else s.vint = 0;
   const voff = p.mode === 'cascata' ? Math.max(-5, Math.min(5, p.vkp * verr + p.vki * s.vint)) : 0;
+  // auto-ajuste do setpoint com travas: 2 s calmo (sem comando, devagar, sem girar, perto do setpoint), ±1,5°
+  const calm = p.mode === 'cascata' && !driving && s.vt === 0 && Math.abs(s.v) < 0.3 && Math.abs(rate) < 20 && Math.abs(pitch - s.sp) < 3;
+  s.calm = calm ? s.calm + 1 : 0;
+  if (s.calm > 400) s.sp = Math.max(s.spStart - 1.5, Math.min(s.spStart + 1.5, s.sp + voff * DT / 2.5));
   const err = pitch - (s.sp + voff);
   let cmd;
   if (p.mode === 'pd-velocidade') {
@@ -634,7 +640,8 @@ function step(s) {
   s.thd += thdd * DT;
   s.th += s.thd * DT;
   s.t += DT;
-  if (Math.abs(s.th) > Math.PI / 4) s.fallen = true;                     // failsafe 45°
+  s.sat = Math.abs(s.v) >= 0.95 * p.vmax ? s.sat + DT : 0;               // rodas no limite por 1 s → FAULT
+  if (Math.abs(s.th) > Math.PI / 4 || s.sat > 1) { s.fallen = true; s.sp = s.spStart; } // queda: descarta o ajuste
 }
 // SIM-CORE-END
 

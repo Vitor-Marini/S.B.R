@@ -50,6 +50,9 @@ void Supervisor::_onEnterState() {
     term.print(">> Estado: ");
     term.println(getStateName());
 
+    // queda: descarta o que o auto-ajuste aprendeu nesta sessão (pode ter sido no começo da queda)
+    if (_state == STATE_FAULT) cfg.setpoint = velCtrl.spAtStart();
+
     // motores já parados nestes estados: hora segura de gravar o que foi ajustado em ACTIVE
     if (cfg.dirty && (_state == STATE_IDLE || _state == STATE_FAULT)) {
         motors.stop();
@@ -70,6 +73,7 @@ void Supervisor::_onEnterState() {
             motors.stop();
             balance.resetIntegral();
             balance.setTurnOffset(0.0f);
+            velCtrl.reset();
             break;
         case STATE_IDLE:
             motors.stop();
@@ -137,7 +141,6 @@ void Supervisor::_runActive() {
 
     if (!imu.healthy()) {
         term.println("FALHA: IMU sem resposta (I2C).");
-        velCtrl.reset();
         _setState(STATE_FAULT);
         return;
     }
@@ -145,9 +148,22 @@ void Supervisor::_runActive() {
     float angle = imu.getPitch();
     if (fabsf(angle) > cfg.failsafeAngle) {
         term.printf("FALHA: Ângulo %.1f° excede limite %.1f°\n", angle, cfg.failsafeAngle);
-        velCtrl.reset();
         _setState(STATE_FAULT);
         return;
+    }
+
+    // rodas no limite por 1 s = disparou (ex.: levantado com o equilíbrio ligado): desliga em vez de
+    // sair correndo quando voltar pro chão
+    if (fabsf(balance.getSpeed()) >= 0.95f * cfg.maxVelocity) {
+        if (!_satSince) _satSince = millis();
+        else if (millis() - _satSince > 1000) {
+            term.println("FALHA: rodas no limite de velocidade por 1 s (levantado ou disparou).");
+            _satSince = 0;
+            _setState(STATE_FAULT);
+            return;
+        }
+    } else {
+        _satSince = 0;
     }
 
     // malha de velocidade → offset de ângulo; malha de curva → diferença entre rodas
@@ -191,6 +207,11 @@ void Supervisor::requestStart() {
 }
 
 void Supervisor::requestStop() {
+    // stop de propósito: guarda o setpoint que o auto-ajuste aprendeu (gravado ao entrar em IDLE)
+    if (_state == STATE_ACTIVE && velCtrl.trimmed()) {
+        term.printf("Setpoint ajustado de %.2f° para %.2f° (salvo).\n", velCtrl.spAtStart(), cfg.setpoint);
+        cfg.dirty = true;
+    }
     if (_state == STATE_ACTIVE || _state == STATE_MOVING || _state == STATE_STARTING) {
         _setState(STATE_IDLE);
     }

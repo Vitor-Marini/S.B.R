@@ -44,7 +44,7 @@ a UDP 9870, liga o `stream` e deixa este terminal como terminal do robô.
 A rede WiFi é salva uma vez pela USB com `wifi <rede> <senha>` (2,4 GHz, nome sem espaços).
 O DS4 **não** conecta direto na ESP32-C3 (ela só tem Bluetooth LE; o DS4 é Bluetooth Clássico).
 
-DS4: analógico esquerdo = frente/trás, direito = virar · △ start · ○ para de andar · ✕ **stop** (desliga
+DS4: analógico esquerdo = frente/trás, direito = virar · △ start · ○ para de andar · □ calibra o gyro (IDLE, parado) · ✕ **stop** (desliga
 o equilíbrio: segure o robô) · L1/R1 velocidade · **Options** = modo motores (só em IDLE, rodas no ar:
 cada analógico vertical gira uma roda, até 1 volta/s).
 
@@ -156,7 +156,7 @@ A velocidade é limitada a `vmax/2` e a curva a ±180 °/s.
 |-------|-------|------------------|
 | `kp` | 0.35 | (m/s²) por grau. Força para voltar ao setpoint. Mínimo físico ≈ 0,17 |
 | `kd` | 0.03 | (m/s²) por °/s. Amortece. **Baixar piorou** (testado) |
-| `sp` | -1.3 | setpoint (°): ponto de equilíbrio. **Se ajusta sozinho** equilibrando parado e é salvo ao parar |
+| `sp` | -1.3 | setpoint (°): ponto de equilíbrio. **Se ajusta sozinho** (até ±1,5°) depois de 2 s calmo parado; salvo só num `stop`, descartado numa queda |
 | `vmax` | 0.8 | limite de velocidade da roda (m/s) |
 | `vkp` | 4 | malha de velocidade: ° de inclinação por m/s de erro. Amortece o "vai e volta" depois de um empurrão |
 | `vki` | 3 | integral da velocidade, **só andando** (no mouse pad precisa de ~1° pra arrancar): vence a resistência à rolagem (limitado a ±2°; se esvazia ao parar) |

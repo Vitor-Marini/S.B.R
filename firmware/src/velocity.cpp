@@ -54,6 +54,19 @@ void VelocityController::update() {
     _angleOffset = cfg.velocityPid.kp * velError + cfg.velocityPid.ki * _velIntegral;
     _angleOffset = constrain(_angleOffset, -5.0f, 5.0f);
 
+    // Auto-ajuste do setpoint COM TRAVAS (a versão sem travas aprendia errado em quedas e com o robô
+    // segurado): só depois de 2 s calmo — sem comando, devagar, sem girar, perto do setpoint — e
+    // limitado a ±1,5° do valor do start. Fica na RAM: salvo num `stop`; numa queda volta ao do start.
+    bool calm = !driving && _rampedTurn == 0.0f && _targetVelocity == 0.0f && _targetTurnRate == 0.0f
+             && fabsf(_estimatedVelocity) < TRIM_MAX_SPEED && fabsf(cfg.pitchRate) < TRIM_MAX_RATE
+             && fabsf(cfg.pitchAngle - cfg.setpoint) < TRIM_MAX_ERR_DEG;
+    _calmTicks = calm ? _calmTicks + 1 : 0;
+    if (_calmTicks > TRIM_CALM_TICKS) {
+        cfg.setpoint = constrain(cfg.setpoint + _angleOffset * dt / TRIM_TAU_S,
+                                 _spStart - TRIM_RANGE_DEG, _spStart + TRIM_RANGE_DEG);
+        _trimmed = true;
+    }
+
 
     // === Taxa de curva PI → diferença de velocidade entre rodas (m/s) ===
     // positivo = virar à esquerda (anti-horário visto de cima, gyro Z positivo)
@@ -85,4 +98,7 @@ void VelocityController::reset() {
     _velIntegral = 0.0f;
     _turnIntegral = 0.0f;
     _estimatedVelocity = 0.0f;
+    _calmTicks = 0;
+    _spStart = cfg.setpoint;
+    _trimmed = false;
 }

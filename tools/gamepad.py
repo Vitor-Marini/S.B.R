@@ -10,6 +10,7 @@ igual ao teleop do teclado. Só biblioteca padrão (lê /dev/input/jsX direto).
   △ triângulo → start (segure o robô no ponto de equilíbrio)
   ○ círculo   → para de andar (drive 0 0; NÃO desliga o equilíbrio)
   ✕ xis       → stop: DESLIGA o equilíbrio (o robô cai: segure antes)
+  □ quadrado  → calibra o gyro (só em IDLE, robô parado no suporte/deitado)
   L1 / R1     → diminui / aumenta a velocidade máxima
   Options     → liga/desliga o MODO MOTORES (só em IDLE, rodas no ar):
                 analógico esquerdo (vertical) = roda esquerda, direito = roda direita
@@ -28,7 +29,7 @@ import time
 
 # mapeamento do DS4 no driver hid-playstation do Linux (confira com --show)
 AXIS_LY, AXIS_RX, AXIS_RY = 1, 3, 4
-BTN_CROSS, BTN_CIRCLE, BTN_TRIANGLE, BTN_L1, BTN_R1, BTN_OPTIONS = 0, 1, 2, 4, 5, 9
+BTN_CROSS, BTN_CIRCLE, BTN_TRIANGLE, BTN_SQUARE, BTN_L1, BTN_R1, BTN_OPTIONS = 0, 1, 2, 3, 4, 5, 9
 STATE_NAMES = {0: "INIT", 1: "CALIBRANDO (deixe parado)", 2: "IDLE", 3: "STARTING (segure na vertical)",
                4: "ACTIVE (equilibrando)", 6: "FAULT (caiu)"}
 MOTOR_MAX = 3200.0  # passos/s no analógico todo (1 volta/s em 1/16)
@@ -99,6 +100,14 @@ def main():
                 elif etype == JS_BUTTON and value == 1:
                     if number == BTN_TRIANGLE:
                         sock.send(b"start\n")
+                    elif number == BTN_SQUARE:
+                        # recalibra o zero do gyro: só em IDLE, com o robô parado (no suporte/deitado)
+                        if robot_state in (2, None):
+                            sock.send(b"cal\n")
+                            print("\rcalibrando: deixe o robô parado ~2 s        ")
+                        else:
+                            print("\rcalibrar só em IDLE: dê stop (✕) segurando o robô antes  ")
+                        continue
                     elif number == BTN_CROSS:
                         sock.send(b"drive 0 0\nstop\n")
                         print("\rSTOP: equilíbrio desligado                ")
