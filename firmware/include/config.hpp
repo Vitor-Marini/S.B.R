@@ -58,6 +58,7 @@ public:
     int robotState = 0;
     int tickHz = 0;          // ticks de controle no último segundo (alvo 200)
     uint32_t tickMaxUs = 0;  // pior tempo de supervisor.run() no último segundo
+    uint32_t tickMaxGapUs = 0;  // maior intervalo entre ciclos no último segundo (ideal: 5000)
 
     bool dirty = false;  // mudou em ACTIVE; grava ao sair (escrita na flash trava o loop)
 

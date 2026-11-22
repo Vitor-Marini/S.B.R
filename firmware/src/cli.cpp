@@ -144,7 +144,8 @@ void CLI::_processLine(const String& line) {
         term.printf("Pitch: %.2f°  Acc: %.2f°  Gyro-int: %.2f°  Rate: %.2f°/s  Yaw: %.2f°\n",
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw());
-        term.printf("Tick: %d Hz  pior run: %lu us\n", cfg.tickHz, (unsigned long)cfg.tickMaxUs);
+        term.printf("Tick: %d Hz  pior run: %lu us  maior intervalo: %lu us\n", cfg.tickHz,
+                    (unsigned long)cfg.tickMaxUs, (unsigned long)cfg.tickMaxGapUs);
         term.printf("Alvo: %.2f m/s  %.0f °/s  |  real: %.2f m/s  %.0f °/s\n",
                       velCtrl.getTarget(), velCtrl.getTurnRate(), balance.getSpeed(), cfg.yawRate);
     } else if (command == "raw") {

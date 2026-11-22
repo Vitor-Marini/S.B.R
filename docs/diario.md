@@ -197,3 +197,12 @@ Mudanças (validadas no simulador do controle.html antes do robô):
   |pitch − sp| < 3°, ±1,5° do valor do start, τ 2,5 s; salvo só num `stop`, descartado em FAULT). Simulado com
   setpoint errado (0,4° e 1° corrigidos; 2° fora do limite), empurrão, robô segurado a 2° e 5° (FAULT, setpoint
   intacto), queda (setpoint volta ao do start) e andar.
+
+## 2026-11-22: travadas de 100 ms com o USB conectado
+
+Medindo o maior intervalo entre ciclos (novo no `angle`), apareciam buracos de ~100 ms a cada poucos
+segundos com o cabo USB ligado e ninguém lendo a serial: a escrita na USB esperava espaço até o timeout
+padrão (100 ms) e travava o loop de controle. `Serial.setTxTimeoutMs(1)` faz desistir em ~2 ms.
+**Não usar 0:** no HWCDC do core o contador de tentativas dá a volta e o write trava o loop pra sempre
+(com o cabo ligado e a serial fechada). Foi o que fez a página web abrir sem receber nenhum dado.
+Pode ter atrapalhado testes antigos feitos no cabo sem a ponte aberta.

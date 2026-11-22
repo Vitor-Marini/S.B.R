@@ -1,6 +1,7 @@
 #include "net.hpp"
 #include "config.hpp"
 #include "cli.hpp"
+#include "web.hpp"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <ESPmDNS.h>
@@ -14,11 +15,13 @@ static uint16_t remotePort = 0;
 
 size_t Tee::write(uint8_t c) {
     net.queue(&c, 1);
+    web.queue(&c, 1);
     return Serial.write(c);
 }
 
 size_t Tee::write(const uint8_t* buf, size_t len) {
     net.queue(buf, len);
+    web.queue(buf, len);
     return Serial.write(buf, len);
 }
 
@@ -65,6 +68,7 @@ void NetManager::update() {
         MDNS.begin("sbr");
         Serial.printf("WiFi: conectado, IP %s (sbr.local), UDP %u\n",
                       WiFi.localIP().toString().c_str(), PORT);
+        web.begin();
     }
 
     // cada pacote = uma ou mais linhas de comando; pacote vazio/"\n" só registra quem ouve
@@ -87,9 +91,10 @@ void NetManager::update() {
 void NetManager::printStatus() {
     if (!_started) { term.println("WiFi: desligado (sem rede salva)"); return; }
     if (WiFi.status() == WL_CONNECTED)
-        term.printf("WiFi: \"%s\" IP %s (sbr.local) RSSI %d dBm, ouvinte %s\n",
+        term.printf("WiFi: \"%s\" IP %s (sbr.local) RSSI %d dBm, ouvinte UDP %s, páginas abertas %d\n",
                     cfg.wifiSsid.c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI(),
-                    remotePort ? remoteIp.toString().c_str() : "nenhum");
+                    remotePort ? remoteIp.toString().c_str() : "nenhum", web.clients());
     else
         term.printf("WiFi: tentando conectar em \"%s\"...\n", cfg.wifiSsid.c_str());
+    web.printStatus();
 }
