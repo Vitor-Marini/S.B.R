@@ -206,3 +206,19 @@ padrão (100 ms) e travava o loop de controle. `Serial.setTxTimeoutMs(1)` faz de
 **Não usar 0:** no HWCDC do core o contador de tentativas dá a volta e o write trava o loop pra sempre
 (com o cabo ligado e a serial fechada). Foi o que fez a página web abrir sem receber nenhum dado.
 Pode ter atrapalhado testes antigos feitos no cabo sem a ponte aberta.
+
+## 2026-11-22: giro com feedforward, `turn <graus>` e segurar posição parado
+
+- **Giro lento:** a curva era só PI sobre o erro (`ykp` 0,001), então o PI tinha que "descobrir" a diferença
+  entre rodas. Agora há feedforward `ω·bitola/2` (bitola 150 mm) e o PI só corrige o resto. Limite da página
+  e do `gamepad.py` subiu de 30 para 45 °/s.
+- **`turn <graus>`** (+ = esquerda): integra o gyro Z, taxa `min(√(a·falta), 4·falta, 45 °/s)`, termina com
+  falta < 1° ("giro ok"), desiste em 10 s; `drive`/`stop` cancelam. Botões ↺90/180/↻90 na página, setas ←→ no DS4.
+  Testado: chega perto do ângulo pedido, mas o robô se deslocava girando → resolvido pelo item abaixo.
+- **Segurar posição parado:** âncora quando a rampa zera e a roda < 3 cm/s; volta a até 8 cm/s (`HOLD_KP` 1,5/s);
+  passou de 50 cm (carregado), a âncora vem junto. Acabou o "recuo" ao soltar o analógico e o deslocamento no giro.
+- **Oscilação lenta (±17 cm, ~15 s)** logo depois: o auto-ajuste do setpoint (τ 2,5 s) lia o `voff` da volta à
+  posição como erro de setpoint e empurrava o setpoint (+0,16° → −0,64° em 6 s): duas malhas integrando na mesma
+  escala de tempo. τ do auto-ajuste → 10 s: sobra ±3 cm / ~5 s, setpoint firme em ~1,25°.
+- "Anda sempre pra frente, mudar o setpoint não muda nada" = sintoma de `drive` chegando (andando, o integral
+  come o erro de setpoint). Suspeita: analógico do DS4 com deriva; a página agora mostra os analógicos crus.

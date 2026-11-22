@@ -35,7 +35,7 @@ STATE_NAMES = {0: "INIT", 1: "CALIBRANDO (deixe parado)", 2: "IDLE", 3: "STARTIN
 MOTOR_MAX = 3200.0  # passos/s no analógico todo (1 volta/s em 1/16)
 
 LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.65]  # m/s no analógico todo pra frente (firmware limita a vmax/2)
-W_MAX = 30.0                   # °/s no analógico todo pro lado (60 °/s ainda desestabiliza; ver diário)
+W_MAX = 45.0                   # °/s no analógico todo pro lado (com feedforward de giro; 60 °/s desestabilizava sem ele)
 DEADZONE = 0.12
 PERIOD = 0.05                  # 20 Hz
 

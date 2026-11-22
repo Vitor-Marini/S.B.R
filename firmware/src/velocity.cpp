@@ -1,6 +1,7 @@
 #include "velocity.hpp"
 #include "config.hpp"
 #include "balance.hpp"
+#include "net.hpp"
 #include <math.h>
 
 VelocityController velCtrl;
@@ -14,11 +15,21 @@ void VelocityController::setTarget(float ms) {
     float lim = 0.5f * cfg.maxVelocity;
     _targetVelocity = constrain(ms, -lim, lim);
     _lastCmdMs = millis();
+    _turnActive = false;  // comando manual manda
 }
 
 void VelocityController::setTurnRate(float degS) {
     _targetTurnRate = constrain(degS, -cfg.maxTurnRate, cfg.maxTurnRate);
     _lastCmdMs = millis();
+    _turnActive = false;
+}
+
+void VelocityController::turnBy(float deg) {
+    _targetVelocity = 0.0f;
+    _turnGoal = deg;
+    _turnDone = 0.0f;
+    _turnStartMs = millis();
+    _turnActive = true;
 }
 
 void VelocityController::update() {
@@ -30,6 +41,21 @@ void VelocityController::update() {
         _targetTurnRate = 0.0f;
     }
 
+    // turn <graus>: taxa pelo que falta, freando a tempo (√(2·a·falta), metade da rampa de folga) sem passar do ponto
+    if (_turnActive) {
+        _turnDone += cfg.yawRate * dt;
+        float left = _turnGoal - _turnDone;
+        if (fabsf(left) < 1.0f || millis() - _turnStartMs > TURN_TIMEOUT_MS) {
+            term.printf(fabsf(left) < 1.0f ? "giro ok: %.1f°\n" : "giro desistiu (travado/no suporte?): %.1f°\n", _turnDone);
+            _turnActive = false;
+            _targetTurnRate = 0.0f;
+        } else {
+            float w = fminf(fminf(sqrtf(TURN_ACCEL * fabsf(left)), TURN_KP * fabsf(left)), TURN_CMD_RATE);
+            _targetTurnRate = copysignf(w, left);
+            _lastCmdMs = millis();  // renova o watchdog enquanto gira
+        }
+    }
+
     // stepper não perde a velocidade comandada (sem encoder): ela é a velocidade da roda
     _estimatedVelocity = balance.getSpeed();
 
@@ -38,11 +64,25 @@ void VelocityController::update() {
     // rampa no alvo: degrau de velocidade vira tranco (o robô precisa inclinar antes de andar)
     float maxStep = TARGET_ACCEL * dt;
     _rampedTarget += constrain(_targetVelocity - _rampedTarget, -maxStep, maxStep);
-    float velError = _rampedTarget - _estimatedVelocity;
-
-    // Parado: só o P (freia, sem memória de posição: empurrou, para onde estiver).
-    // Andando: + integral, que vence a resistência à rolagem; ao parar, ele se esvazia em ~0,5 s.
     bool driving = _rampedTarget != 0.0f;
+
+    // Parado: segura a posição pela odometria das rodas (stepper = posição exata). Ancora quando a roda
+    // quase para (fim da frenagem); tira o "volta um pouco" ao soltar e o deslocamento ao girar no lugar.
+    // Empurrou: volta pro lugar (a até HOLD_MAX_V). Além de HOLD_SLIP_M (carregado/arrastado) a âncora vem junto.
+    float holdVel = 0.0f;
+    if (driving) {
+        _holdArmed = false;
+    } else {
+        if (!_holdArmed && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED) { _holdArmed = true; _holdPos = 0.0f; }
+        if (_holdArmed) {
+            _holdPos = constrain(_holdPos + _estimatedVelocity * dt, -HOLD_SLIP_M, HOLD_SLIP_M);
+            holdVel = constrain(-HOLD_KP * _holdPos, -HOLD_MAX_V, HOLD_MAX_V);
+        }
+    }
+    float velError = _rampedTarget + holdVel - _estimatedVelocity;
+
+    // Parado: só o P (+ a posição acima). Andando: + integral, que vence a resistência à rolagem;
+    // ao parar, ele se esvazia em ~0,2 s.
     if (driving) _velIntegral += velError * dt;
     else _velIntegral -= _velIntegral * dt / I_DECAY_S;
     if (cfg.velocityPid.ki > 0.0f) {
@@ -80,7 +120,9 @@ void VelocityController::update() {
     if (turning) _turnIntegral += turnError * dt;
     else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
     _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
-    _turnOffset = cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
+    // feedforward: diferença por roda que a geometria pede (stepper não patina); o PI só corrige o resto
+    float turnFF = _rampedTurn * DEG_TO_RAD * TRACK_M / 2.0f;
+    _turnOffset = turnFF + cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
     _turnOffset = constrain(_turnOffset, -0.3f, 0.3f);
 }
 
@@ -101,6 +143,8 @@ void VelocityController::reset() {
     _turnOffset = 0.0f;
     _velIntegral = 0.0f;
     _turnIntegral = 0.0f;
+    _turnActive = false;
+    _holdArmed = false;
     _estimatedVelocity = 0.0f;
     _calmTicks = 0;
     _spStart = cfg.setpoint;

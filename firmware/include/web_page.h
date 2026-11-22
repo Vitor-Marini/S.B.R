@@ -28,6 +28,7 @@ input{font:inherit;padding:10px;flex:3;background:#0d0f12;color:#eee;border:1px 
  <button onclick="send('cal')">□ calibrar</button>
  <button class="stop" onclick="send('drive 0 0');send('stop')">✕ stop</button>
 </div>
+<div class="row"><button onclick="send('turn 90')">↺ 90°</button><button onclick="send('turn 180')">180°</button><button onclick="send('turn -90')">↻ 90°</button></div>
 <div id="pad"><div id="joy"><div id="knob"></div></div>
  <div><div class="dim">vel. máx</div><select id="lvl"></select><div id="cmd" class="dim" style="margin-top:8px"></div><div id="gp" class="dim"></div></div></div>
 <div class="leg"><b style="background:#4a90d9"></b>pitch (°)<b style="background:#d9a54a"></b>acel. (°)<b style="background:#888"></b>erro (°)</div><canvas id="c0"></canvas>
@@ -40,7 +41,7 @@ input{font:inherit;padding:10px;flex:3;background:#0d0f12;color:#eee;border:1px 
 const $=id=>document.getElementById(id);
 const STATES={0:'INIT',1:'CALIBRANDO',2:'IDLE',3:'STARTING',4:'ACTIVE',5:'MOVING',6:'FAULT'};
 const KEYS=['pitch','acc','gyroint','rate','yaw','speed','accel','err','voff','vtgt','yrate','wtgt','state','tick','temp'];
-const LEVELS=[0.1,0.2,0.3,0.4,0.5,0.65], W_MAX=30, DEAD=0.12, N=1500; // 30 s a 50 Hz
+const LEVELS=[0.1,0.2,0.3,0.4,0.5,0.65], W_MAX=45, DEAD=0.12, N=1500; // 30 s a 50 Hz
 LEVELS.forEach((v,i)=>$('lvl').add(new Option(v+' m/s',i))); $('lvl').value=2;
 let ws, buf='', cur={}, hist=[], frames=0, fps=0, paused=false, lastState=null;
 
@@ -82,10 +83,12 @@ setInterval(()=>{
   let fwd=-shape(joy.y), turn=-shape(joy.x);           // tela: pra cima = frente, direita = virar à direita
   if(keys.w) fwd=1; if(keys.s) fwd=-1; if(keys.a) turn=1; if(keys.d) turn=-1;
   const g=navigator.getGamepads?[...navigator.getGamepads()].find(p=>p):null;
-  if(g){ $('gp').textContent='controle: '+g.id.slice(0,24);
+  if(g){ const ax=i=>(g.axes[i]||0).toFixed(2);  // analógicos crus: fora de ±0,12 parado = DS4 com deriva
+    $('gp').textContent=`controle: ${g.id.slice(0,18)} · esq Y ${ax(1)} · dir X ${ax(2)}`;
     const b=i=>g.buttons[i]&&g.buttons[i].pressed, edge=i=>b(i)&&!gpPrev[i];
     if(edge(3)) send('start'); if(edge(1)) send('drive 0 0'); if(edge(2)) send('cal');
     if(edge(0)){ send('drive 0 0'); send('stop'); }
+    if(edge(14)) send('turn 90'); if(edge(15)) send('turn -90');  // setas ← →
     if(edge(4)) $('lvl').value=Math.max(0,+$('lvl').value-1); if(edge(5)) $('lvl').value=Math.min(LEVELS.length-1,+$('lvl').value+1);
     gpPrev=g.buttons.map(x=>x.pressed);
     const gf=-shape(g.axes[1]||0), gt=-shape(g.axes[2]||0);  // analógico esquerdo vertical, direito horizontal

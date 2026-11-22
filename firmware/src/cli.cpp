@@ -193,6 +193,10 @@ void CLI::_processLine(const String& line) {
         int sp = args.indexOf(' ');
         velCtrl.setTarget(args.substring(0, sp > 0 ? sp : args.length()).toFloat());
         velCtrl.setTurnRate(sp > 0 ? args.substring(sp + 1).toFloat() : 0.0f);
+    } else if (command == "turn") {
+        // turn <graus> — gira no lugar (+ = esquerda) e responde "giro ok"; só equilibrando
+        if (supervisor.getState() == STATE_ACTIVE) velCtrl.turnBy(args.toFloat());
+        else term.println("turn: só com o robô equilibrando (start)");
     } else if (command == "reset") {
         motors.resetOdometry();
         balance.resetIntegral();
@@ -218,6 +222,7 @@ void CLI::_printHelp() {
     term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|lrev|rrev|gxz|abx|abz|alpha> <val> → Ajustar PID/motor");
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
+    term.println("  turn <graus>      → Girar no lugar (+ = esquerda), ex.: turn 90");
     term.println("  motors <L> <R>    → Teste remoto dos motores (passos/s), só IDLE, vale 0,5 s");
     term.println("  angle             → Ler ângulo atual");
     term.println("  raw               → Acelerômetro, gyro e temperatura");
