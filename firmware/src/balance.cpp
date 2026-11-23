@@ -22,7 +22,9 @@ void BalanceController::compute() {
 
     // pitch positivo = caindo p/ frente → acelerar p/ frente (comando positivo)
     _angleError = pitch - (cfg.setpoint + _angleOffset);
-    float accel = cfg.anglePid.kp * _angleError + cfg.anglePid.kd * pitchRate;
+    // LQR: mesmos dois termos com os ganhos do LQR + posição/velocidade (vindos do velocity, em _extra)
+    float kp = cfg.useLqr ? cfg.lqrKt : cfg.anglePid.kp, kd = cfg.useLqr ? cfg.lqrKw : cfg.anglePid.kd;
+    float accel = kp * _angleError + kd * pitchRate + _extra;
 
     // roda = equilíbrio + velocidade pedida (feedforward). Andar não depende de inclinar:
     // com o centro de massa baixo o contato do pneu segura ~2° de inclinação sem rolar.

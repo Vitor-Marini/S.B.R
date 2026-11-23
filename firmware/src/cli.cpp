@@ -98,6 +98,10 @@ void CLI::_processLine(const String& line) {
             else if (param == "hkp" && value >= 0) { cfg.holdKp = value; }
             else if (param == "mva" && value > 0) { cfg.moveAccel = value; }
             else if (param == "mvs" && value > 0) { cfg.moveSpeed = value; }
+            else if (param == "lkx") { cfg.lqrKx = value; }
+            else if (param == "lkv") { cfg.lqrKv = value; }
+            else if (param == "lkt") { cfg.lqrKt = value; }
+            else if (param == "lkw") { cfg.lqrKw = value; }
             else if (param == "lrev") { cfg.motor.leftReversed = value != 0; }   // inverte o sentido do motor L
             else if (param == "rrev") { cfg.motor.rightReversed = value != 0; }
             else if (param == "gxz") { cfg.filter.gyroCross = value; }
@@ -206,6 +210,14 @@ void CLI::_processLine(const String& line) {
         // turn <graus> — gira no lugar (+ = esquerda) e responde "giro ok"; só equilibrando
         if (supervisor.getState() == STATE_ACTIVE) velCtrl.turnBy(args.toFloat());
         else term.println("turn: só com o robô equilibrando (start)");
+    } else if (command == "ctl") {
+        // ctl [lqr|pid] — troca o controle (só fora do equilíbrio: trocar no meio dá tranco)
+        args.toLowerCase();
+        RobotState st = supervisor.getState();
+        if (args.length() && (st == STATE_ACTIVE || st == STATE_STARTING)) term.println("ctl: dê stop antes de trocar");
+        else if (args == "lqr") cfg.useLqr = true;
+        else if (args == "pid") cfg.useLqr = false;
+        term.printf("Controle: %s (save pra manter)\n", cfg.useLqr ? "LQR" : "PD + cascata");
     } else if (command == "move") {
         // move <cm> — anda e para no alvo (+ = frente), responde "move ok"; só equilibrando
         if (supervisor.getState() == STATE_ACTIVE) velCtrl.moveBy(args.toFloat() / 100.0f);
@@ -232,10 +244,11 @@ void CLI::_printHelp() {
     term.println("  calibrate (cal)    → Recalibrar giroscópio");
     term.println("  status (st)        → Mostrar configuração e telemetria");
     term.println("  state              → Mostrar estado atual");
-    term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|hkp|mva|mvs|lrev|rrev|gxz|abx|abz|alpha> <val> → Ajustar PID/motor");
+    term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|hkp|mva|mvs|lkt|lkw|lkx|lkv|lrev|rrev|gxz|abx|abz|alpha> <val> → Ajustar PID/motor");
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
     term.println("  turn <graus>      → Girar no lugar (+ = esquerda), ex.: turn 90");
+    term.println("  ctl [lqr|pid]     → Controle: LQR ou PD + cascata (fora do equilíbrio)");
     term.println("  move <cm>         → Andar e parar no alvo (+ = frente), ex.: move 50");
     term.println("  motors <L> <R>    → Teste remoto dos motores (passos/s), só IDLE, vale 0,5 s");
     term.println("  angle             → Ler ângulo atual");

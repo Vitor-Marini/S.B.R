@@ -25,7 +25,8 @@ A_MAX = 6.0           # m/s²: limite conservador sem saber a corrente (Vref) do
 DEG = np.pi / 180
 
 # Pesos pela regra de Bryson: 1/(desvio máximo aceitável)². O que importa mais pesa mais.
-MAX_X, MAX_V, MAX_TH, MAX_W, MAX_A = 0.02, 0.3, 3 * DEG, 30 * DEG, 3.0
+# "suave": quase o mesmo resultado simulado com ganhos ~2× os do PD atual (os de 3°/3 m/s² davam ~6×: ruído)
+MAX_X, MAX_V, MAX_TH, MAX_W, MAX_A = 0.05, 0.4, 8 * DEG, 100 * DEG, 1.5
 
 
 def model(L):

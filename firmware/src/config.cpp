@@ -61,6 +61,11 @@ bool ConfigManager::load() {
     if (!doc["hold_kp"].isNull()) holdKp = doc["hold_kp"].as<float>();
     if (!doc["move_accel"].isNull()) moveAccel = doc["move_accel"].as<float>();
     if (!doc["move_speed"].isNull()) moveSpeed = doc["move_speed"].as<float>();
+    if (!doc["use_lqr"].isNull()) useLqr = doc["use_lqr"].as<bool>();
+    if (!doc["lqr_kx"].isNull()) lqrKx = doc["lqr_kx"].as<float>();
+    if (!doc["lqr_kv"].isNull()) lqrKv = doc["lqr_kv"].as<float>();
+    if (!doc["lqr_kt"].isNull()) lqrKt = doc["lqr_kt"].as<float>();
+    if (!doc["lqr_kw"].isNull()) lqrKw = doc["lqr_kw"].as<float>();
     if (!doc["wifi_ssid"].isNull()) wifiSsid = doc["wifi_ssid"].as<String>();
     if (!doc["wifi_pass"].isNull()) wifiPass = doc["wifi_pass"].as<String>();
 
@@ -107,6 +112,11 @@ bool ConfigManager::save() {
     doc["hold_kp"] = holdKp;
     doc["move_accel"] = moveAccel;
     doc["move_speed"] = moveSpeed;
+    doc["use_lqr"] = useLqr;
+    doc["lqr_kx"] = lqrKx;
+    doc["lqr_kv"] = lqrKv;
+    doc["lqr_kt"] = lqrKt;
+    doc["lqr_kw"] = lqrKw;
     doc["wifi_ssid"] = wifiSsid;
     doc["wifi_pass"] = wifiPass;
 
@@ -138,6 +148,8 @@ void ConfigManager::print() {
     term.printf("  Max V:  %.2f m/s\n", maxVelocity);
     term.printf("  Max T:  %.1f °/s\n", maxTurnRate);
     term.printf("  Posição: hkp %.2f  move: mva %.2f m/s²  mvs %.2f m/s\n", holdKp, moveAccel, moveSpeed);
+    term.printf("--- Controle: %s ---\n", useLqr ? "LQR" : "PD + cascata");
+    term.printf("  LQR: lkt %.3f /°  lkw %.4f /(°/s)  lkx %.2f /m  lkv %.2f /(m/s)\n", lqrKt, lqrKw, lqrKx, lqrKv);
     term.print ("--- Filter ---\n");
     term.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);
     term.printf("  Comp alpha: %.3f  Gyro cross (gxz): %.4f\n", filter.complementaryAlpha, filter.gyroCross);

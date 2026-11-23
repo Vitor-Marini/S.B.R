@@ -20,6 +20,7 @@ public:
     void update();
     float getAngleOffset();
     float getTurnOffset();  // m/s de diferença entre rodas
+    float getLqrAccel() { return _lqrAccel; }  // LQR: kx·(x − x_ref) + kv·(v − v_ref) + a_ref (m/s²)
     void reset();
 
 private:
@@ -37,6 +38,11 @@ private:
     uint32_t _calmTicks = 0;
     float _spStart = 0.0f;
     bool _trimmed = false;
+    void _updateCascade(float dt);
+    void _updateLqr(float dt);
+    float _x = 0.0f, _xRef = 0.0f, _moveStartX = 0.0f, _lqrAccel = 0.0f;  // LQR (m)
+    static constexpr float LQR_SLIP_M = 0.3f;      // m: mais longe que isso da referência, ela vem junto
+    static constexpr float LQR_MAX_ACCEL = 3.0f;   // m/s²: teto dos termos de posição/velocidade
     bool _holdArmed = false;
     float _holdPos = 0.0f;                            // m andados desde a âncora (parado)
     static constexpr float HOLD_MAX_V = 0.08f;        // m/s máx que a posição pede

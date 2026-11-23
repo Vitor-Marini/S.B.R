@@ -45,6 +45,7 @@ void VelocityController::moveBy(float m) {
     _moveActive = true;
     _moveBraking = _moveFailed = false;
     _moveRefP = _moveRefV = 0.0f;
+    _moveStartX = _x;
     _velIntegral = 0.0f;
 }
 
@@ -75,6 +76,31 @@ void VelocityController::update() {
     // stepper não perde a velocidade comandada (sem encoder): ela é a velocidade da roda
     _estimatedVelocity = balance.getSpeed();
 
+    if (cfg.useLqr) _updateLqr(dt);
+    else _updateCascade(dt);
+
+    // === Taxa de curva PI → diferença de velocidade entre rodas (m/s) ===
+    // positivo = virar à esquerda (anti-horário visto de cima, gyro Z positivo)
+    // rampa no alvo de curva: degrau vira tranco nas rodas e o giro passa do ponto ao parar
+    float turnStep = TURN_ACCEL * dt;
+    _rampedTurn += constrain(_targetTurnRate - _rampedTurn, -turnStep, turnStep);
+    // Sem comando de giro a malha desliga: as rodas recebem a mesma velocidade e, com motor de passo, o
+    // robô não gira. Ligada, ela seguiria o gyro Z, e um erro de zero dele (temperatura) vira giro lento parado.
+    bool turning = _rampedTurn != 0.0f || _targetTurnRate != 0.0f;
+    // Sem comando de giro as rodas giram igual: o robô não gira (salvo patinar). O que o gyro Z ler é erro de
+    // zero (esquenta e muda; medido ~1,7 °/s derivando o yaw em ACTIVE): corrige devagar, como o trackGyroBias.
+    if (!turning) imu.trackGyroZ();
+    float turnError = turning ? _rampedTurn - cfg.yawRate : 0.0f;
+    if (turning) _turnIntegral += turnError * dt;
+    else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
+    _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
+    // feedforward: diferença por roda que a geometria pede (stepper não patina); o PI só corrige o resto
+    float turnFF = _rampedTurn * DEG_TO_RAD * TRACK_M / 2.0f;
+    _turnOffset = turnFF + cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
+    _turnOffset = constrain(_turnOffset, -0.3f, 0.3f);
+}
+
+void VelocityController::_updateCascade(float dt) {
     // move <cm>: em vez de mandar andar e "frear no ponto" (o robô freia devagar e passava 20–40 cm), gera uma
     // trajetória de referência — posição e velocidade, trapezoidal a cfg.moveAccel, que ele consegue seguir — e
     // persegue as duas: a velocidade vira o alvo, o erro de posição entra como na malha de posição parada.
@@ -165,27 +191,56 @@ void VelocityController::update() {
                                  _spStart - TRIM_RANGE_DEG, _spStart + TRIM_RANGE_DEG);
         _trimmed = true;
     }
+}
 
-
-    // === Taxa de curva PI → diferença de velocidade entre rodas (m/s) ===
-    // positivo = virar à esquerda (anti-horário visto de cima, gyro Z positivo)
-    // rampa no alvo de curva: degrau vira tranco nas rodas e o giro passa do ponto ao parar
-    float turnStep = TURN_ACCEL * dt;
-    _rampedTurn += constrain(_targetTurnRate - _rampedTurn, -turnStep, turnStep);
-    // Sem comando de giro a malha desliga: as rodas recebem a mesma velocidade e, com motor de passo, o
-    // robô não gira. Ligada, ela seguiria o gyro Z, e um erro de zero dele (temperatura) vira giro lento parado.
-    bool turning = _rampedTurn != 0.0f || _targetTurnRate != 0.0f;
-    // Sem comando de giro as rodas giram igual: o robô não gira (salvo patinar). O que o gyro Z ler é erro de
-    // zero (esquenta e muda; medido ~1,7 °/s derivando o yaw em ACTIVE): corrige devagar, como o trackGyroBias.
-    if (!turning) imu.trackGyroZ();
-    float turnError = turning ? _rampedTurn - cfg.yawRate : 0.0f;
-    if (turning) _turnIntegral += turnError * dt;
-    else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
-    _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
-    // feedforward: diferença por roda que a geometria pede (stepper não patina); o PI só corrige o resto
-    float turnFF = _rampedTurn * DEG_TO_RAD * TRACK_M / 2.0f;
-    _turnOffset = turnFF + cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
-    _turnOffset = constrain(_turnOffset, -0.3f, 0.3f);
+// LQR: só gera a referência (posição, velocidade, aceleração) e os termos de posição/velocidade; os de ângulo
+// estão no balance. Parado a referência fica no lugar (empurrou → volta); drive move a referência pela rampa;
+// move segue a trajetória trapezoidal. θ_ref = a_ref/g: o quanto precisa inclinar pra acelerar.
+void VelocityController::_updateLqr(float dt) {
+    float v = _estimatedVelocity;
+    _x += v * dt;
+    float vr = 0.0f, ar = 0.0f;
+    if (_moveActive) {
+        float goal = fabsf(_moveGoal), sgn = _moveGoal >= 0.0f ? 1.0f : -1.0f;
+        bool timeout = millis() - _moveStartMs > MOVE_TIMEOUT_MS;
+        if (!_moveBraking) {
+            float prev = _moveRefV;
+            _moveRefV = fminf(fminf(_moveRefV + cfg.moveAccel * dt, cfg.moveSpeed),
+                              sqrtf(2.0f * cfg.moveAccel * fmaxf(goal - _moveRefP, 0.0f)));
+            _moveRefP = fminf(_moveRefP + fmaxf(_moveRefV, 0.005f) * dt, goal);
+            vr = sgn * _moveRefV;
+            ar = sgn * (_moveRefV - prev) / dt;
+            _xRef = _moveStartX + sgn * _moveRefP;
+            _lastCmdMs = millis();
+            if (_moveRefP >= goal || timeout) {
+                _moveBraking = true;
+                _moveFailed = timeout;
+                vr = ar = 0.0f;
+            }
+        }
+        bool settled = _moveBraking && fabsf(_x - (_moveStartX + _moveGoal)) < 0.03f && fabsf(v) < HOLD_ARM_SPEED;
+        if (settled || timeout) {
+            term.printf(settled && !_moveFailed ? "move ok: %.1f cm\n" : "move desistiu: %.1f cm\n",
+                        (_x - _moveStartX) * 100.0f);
+            _moveActive = false;
+        }
+        _rampedTarget = vr;
+    } else {
+        float prev = _rampedTarget;
+        float maxStep = TARGET_ACCEL * dt;
+        _rampedTarget += constrain(_targetVelocity - _rampedTarget, -maxStep, maxStep);
+        vr = _rampedTarget;
+        ar = (_rampedTarget - prev) / dt;
+        _xRef += vr * dt;
+    }
+    // longe demais da referência (carregado, preso): a referência vem junto, sem sair correndo depois
+    float ex = _x - _xRef;
+    if (fabsf(ex) > LQR_SLIP_M) {
+        _xRef = _x - copysignf(LQR_SLIP_M, ex);
+        ex = copysignf(LQR_SLIP_M, ex);
+    }
+    _lqrAccel = constrain(cfg.lqrKx * ex + cfg.lqrKv * (v - vr) + ar, -LQR_MAX_ACCEL, LQR_MAX_ACCEL);
+    _angleOffset = degrees(ar / 9.81f);
 }
 
 float VelocityController::getAngleOffset() {
@@ -208,6 +263,7 @@ void VelocityController::reset() {
     _turnActive = false;
     _moveActive = false;
     _holdArmed = false;
+    _x = _xRef = _lqrAccel = 0.0f;
     _estimatedVelocity = 0.0f;
     _calmTicks = 0;
     _spStart = cfg.setpoint;
