@@ -73,6 +73,11 @@ Microstepping do DRV8825:
 | Chip do MPU acima do eixo | 37 mm |
 
 Fonte: modelo Fusion "S.B.R mk2" v4, massas calibradas com o peso real (precisão: massa ±5 %, CG e inércias ±15 %).
+
+**L medido (2026-11-22), teste do pêndulo:** robô de cabeça pra baixo, balançando em torno do eixo das rodas,
+gyro gravado pelo stream. Período com amplitude de 15–30°: **T ≈ 0,61 s** (0,58–0,63) → `L = g·(T/2π)² ≈ 0,09 m`
+(0,084–0,099), ~8 % abaixo do CAD. Acima de ~50° o período cresce (pêndulo não linear) e o gyro **satura em
+±500 °/s** (escala atual do MPU).
 O firmware usa roda de 74 mm (medida); o CAD diz 75 mm (1 % de diferença na velocidade).
 
 ## Onde montar o IMU
