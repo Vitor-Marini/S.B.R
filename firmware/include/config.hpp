@@ -38,6 +38,9 @@ public:
 
     float maxVelocity = 0.8f;
     float maxTurnRate = 180.0f;
+    float holdKp = 0.7f;      // 1/s: posição parada (1,5 tocava ±10 cm)
+    float moveAccel = 0.15f;  // m/s²: trajetória do move
+    float moveSpeed = 0.2f;   // m/s: velocidade máx do move
 
     String wifiSsid;  // rede de casa; salva só na flash (comando `wifi`), nunca no git
     String wifiPass;

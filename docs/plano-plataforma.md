@@ -97,6 +97,7 @@ Webcam (ou celular), suporte alto pra câmera, tags impressas (gerar PDF com `cv
 
 ## Estado (2026-11-22)
 
-Fase 1 quase: `tools/sbr.py` e `move` prontos; `move` acerta (~1 cm) mas demora (~15 s) e ondula. Ajuste dos
-ganhos ao vivo (`tune hkp/mva/mvs`) em andamento. A solução de fundo é o LQR (`feature/lqr-control`): a cascata
+Fase 1 entregue com limitações: `tools/sbr.py` (inclui `medir <cm>`) e `move`. Ganhos ao vivo `tune hkp/mva/mvs`;
+14 medições → `hkp` 0,7, `mva` 0,1, `mvs` 0,15: termina a 1–3 cm do alvo, mas passa 3–15 cm e leva ~6–8 s
+("assentou" = 3 cm, o tamanho do balanço parado). Nenhum ajuste tirou o passa-do-alvo. A solução de fundo é o LQR (`feature/lqr-control`): a cascata
 equilíbrio → velocidade → posição tem atraso demais pra parar rápido sem passar do ponto.

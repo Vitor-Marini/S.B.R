@@ -39,17 +39,14 @@ private:
     bool _trimmed = false;
     bool _holdArmed = false;
     float _holdPos = 0.0f;                            // m andados desde a âncora (parado)
-    static constexpr float HOLD_KP = 0.7f;            // 1/s: 1,5 tocava ±10 cm (~6 s): rápido demais pra malha de velocidade
     static constexpr float HOLD_MAX_V = 0.08f;        // m/s máx que a posição pede
     static constexpr float HOLD_SLIP_M = 0.50f;       // m: empurrão volta pro lugar; além disso aceita o lugar novo
     static constexpr float HOLD_ARM_SPEED = 0.03f;    // m/s: ancora quando a roda quase para
     bool _moveActive = false, _moveBraking = false, _moveFailed = false;
     float _moveGoal = 0.0f, _moveDone = 0.0f;  // m pedidos / m andados
     uint32_t _moveStartMs = 0;
-    static constexpr float MOVE_SPEED = 0.2f;         // m/s máx do move
     float _moveRefP = 0.0f, _moveRefV = 0.0f;         // trajetória de referência do move (m, m/s, em módulo)
-    static constexpr float MOVE_ACCEL = 0.15f;        // m/s²: o que o robô consegue seguir (frenagem real ~0,15)
-    static constexpr uint32_t MOVE_TIMEOUT_MS = 15000;
+    static constexpr uint32_t MOVE_TIMEOUT_MS = 25000;
     bool _turnActive = false;
     float _turnGoal = 0.0f, _turnDone = 0.0f;  // ° pedidos / ° girados (gyro Z integrado)
     uint32_t _turnStartMs = 0;
