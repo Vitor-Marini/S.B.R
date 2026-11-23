@@ -240,3 +240,20 @@ Pode ter atrapalhado testes antigos feitos no cabo sem a ponte aberta.
 - **Limite da cascata**: a malha de velocidade tem ~1 s de atraso (inclinar antes de andar/frear); toda malha de
   posição em cima (parado, move, empurrão) ou oscila ou demora. Parado: ±2,5 cm. Giro 180°: gyro 179°, rodas 189°
   (patinou ou bitola ≠ 150 mm). Próximo grande passo: **LQR** (branch `feature/lqr-control`).
+
+## 2026-11-22 (madrugada): LQR vira o padrão
+
+- `tools/lqr.py`: modelo com aceleração da roda como entrada (stepper) e L medido 0,09 m; simulação com atraso,
+  ruído, perturbação calibrada pelo tremor real e limites. A cascata simulada reproduz o robô (recua antes de sair,
+  passa 8–15 cm) — por isso deu pra confiar no LQR simulado.
+- Firmware: `ctl lqr|pid`, `a = kt·θ + kw·ω + kx·(x−x_ref) + kv·(v−v_ref) + a_ref`, θ_ref = a_ref/g; ganhos "suave"
+  (`lkt` 0,744, `lkw` 0,0707, `lkx` 27,67, `lkv` 14,04), salvos como padrão.
+- Tropeços: (1) termo de posição saturava entre 11 e 30 cm (referência só vinha junto a 30 cm, teto 3 m/s²) →
+  empurrão virava vai-e-vem crescente; (2) pedia 11 m/s² nos empurrões (a roda não acompanha) → teto 4 m/s²;
+  (3) com referência a 8 cm e ganhos fracos, 1,5° de setpoint/piso fazia andar pra trás a 0,1 m/s → limite = mín(0,3 m,
+  2,5/kx). Ganhos mais fracos ("S6") aguentam mais atraso, mas o suave com essas correções ficou melhor.
+- Resultado: parado ±0,3–1 cm (cascata ±2,5–4); ~30 empurrões e direção pelo analógico com 1 queda (pancada que levou
+  a roda a 0,8 m/s, o limite). **Demo**: move 50 → 48,0 cm em 4,8 s; turn 180 → 179,0°; move 50 → 48,8 cm; turn 180 →
+  179,1°; terminou a ~10 cm do início (cascata: 15 s por move e falhava). Rodas contam ~5 % a mais no giro que o gyro
+  (bitola real ≠ 150 mm?).
+- Aberto: rejuntes devagar às vezes derrubam (roda patina ou perde passo? Vref nunca medido); limite de 0,8 m/s.
