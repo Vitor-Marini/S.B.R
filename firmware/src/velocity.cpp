@@ -234,10 +234,13 @@ void VelocityController::_updateLqr(float dt) {
         _xRef += vr * dt;
     }
     // longe demais da referência (carregado, preso): a referência vem junto, sem sair correndo depois
+    // O termo de posição também segura erro de setpoint/piso inclinado: aguenta até kx·slip/kt graus (S6: ~3°).
+    // Mas kx·slip não pode passar do teto (senão fica cego pra posição): slip = mín(0,3 m, 2,5 m/s² / kx).
+    float slip = fminf(LQR_SLIP_M, 2.5f / fmaxf(cfg.lqrKx, 0.1f));
     float ex = _x - _xRef;
-    if (fabsf(ex) > LQR_SLIP_M) {
-        _xRef = _x - copysignf(LQR_SLIP_M, ex);
-        ex = copysignf(LQR_SLIP_M, ex);
+    if (fabsf(ex) > slip) {
+        _xRef = _x - copysignf(slip, ex);
+        ex = copysignf(slip, ex);
     }
     _lqrAccel = constrain(cfg.lqrKx * ex + cfg.lqrKv * (v - vr) + ar, -LQR_MAX_ACCEL, LQR_MAX_ACCEL);
     _angleOffset = degrees(ar / 9.81f);
