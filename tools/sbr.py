@@ -13,6 +13,7 @@ Uso como biblioteca (docs/plano-plataforma.md, fase 1):
 
 Linha de comando:
     python3 tools/sbr.py [host] demo   → anda 50 cm, gira 180°, volta 50 cm, gira 180° (robô equilibrando)
+    python3 tools/sbr.py [host] medir [cm]  → um move e mede: atraso pra sair, quanto passou, tempo pra assentar
     python3 tools/sbr.py [host] <comando do terminal...>   → manda e mostra as respostas por 2 s
     python3 tools/sbr.py selftest
 Só biblioteca padrão.
@@ -214,6 +215,34 @@ def demo(r):
         time.sleep(1)  # deixa a posição assentar
 
 
+def measure(r, cm=50.0):
+    """Um move de cm, medindo pela odometria: atraso pra sair, quanto passou do alvo, tempo até 'move ok'."""
+    frames = []
+    r.on_frame = lambda f: frames.append((time.time(), f.get("speed", 0.0)))
+    r.wait_state(r.ACTIVE)
+    time.sleep(1)
+    t0 = time.time()
+    try:
+        r.move(cm, timeout=30)
+        ok = True
+    except (RuntimeError, TimeoutError) as e:
+        print(e)
+        ok = False
+    t1 = time.time()
+    time.sleep(1)
+    r.on_frame = None
+    x, prev, start, peak = 0.0, None, None, 0.0
+    for t, v in frames:
+        if prev is not None and t >= t0:
+            x += v * (t - prev)
+            if start is None and abs(x) > 0.01:
+                start = t - t0
+            peak = max(peak, x * (1 if cm >= 0 else -1))
+        prev = t
+    print(f"{'ok' if ok else 'FALHOU'}: saiu em {start or 0:.1f} s, passou {max(0, peak * 100 - abs(cm)):.1f} cm, "
+          f"assentou em {t1 - t0:.1f} s, terminou a {abs(x * 100 - cm):.1f} cm do alvo")
+
+
 def _selftest():
     r = Robot.__new__(Robot)
     r.frame, r.on_frame, r.lines, r._cur, r._buf = {}, None, queue.Queue(), {}, ""
@@ -238,11 +267,13 @@ if __name__ == "__main__":
     if args == ["selftest"]:
         _selftest()
         sys.exit()
-    host = args.pop(0) if args and args[0] not in ("demo",) and "." in args[0] else "sbr.local"
+    host = args.pop(0) if args and args[0] not in ("demo", "medir") and "." in args[0] else "sbr.local"
     robot = Robot(host)
     try:
         if args == ["demo"]:
             demo(robot)
+        elif args and args[0] == "medir":
+            measure(robot, float(args[1]) if len(args) > 1 else 50.0)
         elif args:
             robot.send(" ".join(args))
             t = time.time()

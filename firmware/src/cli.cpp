@@ -95,6 +95,9 @@ void CLI::_processLine(const String& line) {
             else if (param == "vmax" && value > 0) { cfg.maxVelocity = value; }
             else if (param == "vkp") { cfg.velocityPid.kp = value; }
             else if (param == "vki") { cfg.velocityPid.ki = value; }
+            else if (param == "hkp" && value >= 0) { cfg.holdKp = value; }
+            else if (param == "mva" && value > 0) { cfg.moveAccel = value; }
+            else if (param == "mvs" && value > 0) { cfg.moveSpeed = value; }
             else if (param == "lrev") { cfg.motor.leftReversed = value != 0; }   // inverte o sentido do motor L
             else if (param == "rrev") { cfg.motor.rightReversed = value != 0; }
             else if (param == "gxz") { cfg.filter.gyroCross = value; }
@@ -229,7 +232,7 @@ void CLI::_printHelp() {
     term.println("  calibrate (cal)    → Recalibrar giroscópio");
     term.println("  status (st)        → Mostrar configuração e telemetria");
     term.println("  state              → Mostrar estado atual");
-    term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|lrev|rrev|gxz|abx|abz|alpha> <val> → Ajustar PID/motor");
+    term.println("  tune <kp|ki|kd|sp|ykp|yki|ykd|spr|accel|vmax|vkp|vki|hkp|mva|mvs|lrev|rrev|gxz|abx|abz|alpha> <val> → Ajustar PID/motor");
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
     term.println("  turn <graus>      → Girar no lugar (+ = esquerda), ex.: turn 90");

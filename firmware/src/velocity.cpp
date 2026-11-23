@@ -76,7 +76,7 @@ void VelocityController::update() {
     _estimatedVelocity = balance.getSpeed();
 
     // move <cm>: em vez de mandar andar e "frear no ponto" (o robô freia devagar e passava 20–40 cm), gera uma
-    // trajetória de referência — posição e velocidade, trapezoidal a MOVE_ACCEL, que ele consegue seguir — e
+    // trajetória de referência — posição e velocidade, trapezoidal a cfg.moveAccel, que ele consegue seguir — e
     // persegue as duas: a velocidade vira o alvo, o erro de posição entra como na malha de posição parada.
     // No fim da trajetória a âncora fica no alvo e a malha de posição faz o resto.
     float moveHold = 0.0f;
@@ -84,12 +84,12 @@ void VelocityController::update() {
         _moveDone += _estimatedVelocity * dt;
         float goal = fabsf(_moveGoal), sgn = _moveGoal >= 0.0f ? 1.0f : -1.0f;
         if (!_moveBraking) {
-            _moveRefV = fminf(fminf(_moveRefV + MOVE_ACCEL * dt, MOVE_SPEED),
-                              sqrtf(2.0f * MOVE_ACCEL * fmaxf(goal - _moveRefP, 0.0f)));
+            _moveRefV = fminf(fminf(_moveRefV + cfg.moveAccel * dt, cfg.moveSpeed),
+                              sqrtf(2.0f * cfg.moveAccel * fmaxf(goal - _moveRefP, 0.0f)));
             _moveRefP = fminf(_moveRefP + fmaxf(_moveRefV, 0.005f) * dt, goal);  // piso: não fica assintótico
             _targetVelocity = sgn * _moveRefV;
             _lastCmdMs = millis();
-            moveHold = constrain(-HOLD_KP * (_moveDone - sgn * _moveRefP), -HOLD_MAX_V, HOLD_MAX_V);
+            moveHold = constrain(-cfg.holdKp * (_moveDone - sgn * _moveRefP), -HOLD_MAX_V, HOLD_MAX_V);
             bool timeout = millis() - _moveStartMs > MOVE_TIMEOUT_MS;
             if (_moveRefP >= goal || timeout) {
                 _moveBraking = true;  // trajetória acabou: daqui pra frente é a malha de posição no alvo
@@ -122,9 +122,9 @@ void VelocityController::update() {
         }
         if (_holdArmed) {
             _holdPos = constrain(_holdPos + _estimatedVelocity * dt, -HOLD_SLIP_M, HOLD_SLIP_M);
-            holdVel = constrain(-HOLD_KP * _holdPos, -HOLD_MAX_V, HOLD_MAX_V);
-            // só responde quando assentou no alvo: um turn logo depois, com o robô ainda voltando, vira arco
-            bool settled = fabsf(_holdPos) < 0.02f && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED;
+            holdVel = constrain(-cfg.holdKp * _holdPos, -HOLD_MAX_V, HOLD_MAX_V);
+            // só responde quando assentou no alvo (3 cm = o balanço parado; 2 cm esperava sorte): um turn logo depois, com o robô ainda voltando, vira arco
+            bool settled = fabsf(_holdPos) < 0.03f && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED;
             if (_moveActive && _moveBraking && (settled || millis() - _moveStartMs > MOVE_TIMEOUT_MS)) {
                 term.printf(_moveFailed || !settled ? "move desistiu: %.1f cm\n" : "move ok: %.1f cm\n",
                             (_moveGoal + _holdPos) * 100.0f);
@@ -159,7 +159,7 @@ void VelocityController::update() {
     if (_calmTicks > TRIM_CALM_TICKS) {
         // A posição só consegue pedir vkp × HOLD_MAX_V (~0,3°) de correção. Setpoint mais errado que isso: a posição
         // satura e o robô vai embora devagar → aí aprende rápido. Perto do lugar, devagar (rápido sempre = oscilava).
-        bool holdSaturated = fabsf(_holdPos) > HOLD_MAX_V / HOLD_KP;
+        bool holdSaturated = cfg.holdKp > 0.0f && fabsf(_holdPos) > HOLD_MAX_V / cfg.holdKp;
         float tau = holdSaturated ? TRIM_TAU_FAST_S : TRIM_TAU_S;
         cfg.setpoint = constrain(cfg.setpoint + _angleOffset * dt / tau,
                                  _spStart - TRIM_RANGE_DEG, _spStart + TRIM_RANGE_DEG);
