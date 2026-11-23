@@ -94,3 +94,9 @@ Webcam (ou celular), suporte alto pra câmera, tags impressas (gerar PDF com `cv
 - Latência câmera + WiFi (~100–200 ms): manter velocidades baixas (≤ 0,3 m/s) e ganhos modestos na fase 3.
 - Reflexo/brilho na tag do topo; tag pequena demais pra altura da câmera.
 - O robô ainda balança ±3 cm parado: tolerância de chegada não pode ser menor que isso.
+
+## Estado (2026-11-22)
+
+Fase 1 quase: `tools/sbr.py` e `move` prontos; `move` acerta (~1 cm) mas demora (~15 s) e ondula. Ajuste dos
+ganhos ao vivo (`tune hkp/mva/mvs`) em andamento. A solução de fundo é o LQR (`feature/lqr-control`): a cascata
+equilíbrio → velocidade → posição tem atraso demais pra parar rápido sem passar do ponto.

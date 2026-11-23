@@ -16,16 +16,22 @@ void CLI::begin() {
     _printPrompt();
 }
 
+// rumo pelas rodas (°, + = esquerda, sem dar a volta): compara com o yaw do gyro para ver se o giro foi real
+static float wheelHeading() {
+    float stepsPerMeter = cfg.motor.stepsPerRev / (PI * cfg.motor.wheelDiameterMm * 0.001f);
+    return degrees((motors.getRightSteps() - motors.getLeftSteps()) / stepsPerMeter / 0.150f);  // bitola 150 mm
+}
+
 void CLI::update() {
     // formato Teleplot (">nome:valor"), 50 Hz
     if (_streaming && millis() - _lastStream >= 20) {
         _lastStream = millis();
-        term.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>vtgt:%.3f\n>yrate:%.1f\n>wtgt:%.0f\n>state:%d\n>tick:%d\n>temp:%.1f\n",
+        term.printf(">pitch:%.2f\n>acc:%.2f\n>gyroint:%.2f\n>rate:%.2f\n>yaw:%.2f\n>speed:%.3f\n>accel:%.2f\n>err:%.2f\n>voff:%.2f\n>vtgt:%.3f\n>yrate:%.1f\n>wtgt:%.0f\n>state:%d\n>tick:%d\n>head:%.1f\n>temp:%.1f\n",
                       imu.getPitch(), imu.getAccAngle(), imu.getGyroAngle(),
                       imu.getPitchRate(), imu.getYaw(), balance.getSpeed(), cfg.pidOutput,
                       balance.getAngleError(), velCtrl.getAngleOffset(), velCtrl.getTarget(),
                       cfg.yawRate, velCtrl.getTurnRate(),
-                      cfg.robotState, cfg.tickHz, imu.getTemp());
+                      cfg.robotState, cfg.tickHz, wheelHeading(), imu.getTemp());
     }
     while (Serial.available()) {
         char c = Serial.read();
@@ -197,6 +203,10 @@ void CLI::_processLine(const String& line) {
         // turn <graus> — gira no lugar (+ = esquerda) e responde "giro ok"; só equilibrando
         if (supervisor.getState() == STATE_ACTIVE) velCtrl.turnBy(args.toFloat());
         else term.println("turn: só com o robô equilibrando (start)");
+    } else if (command == "move") {
+        // move <cm> — anda e para no alvo (+ = frente), responde "move ok"; só equilibrando
+        if (supervisor.getState() == STATE_ACTIVE) velCtrl.moveBy(args.toFloat() / 100.0f);
+        else term.println("move: só com o robô equilibrando (start)");
     } else if (command == "reset") {
         motors.resetOdometry();
         balance.resetIntegral();
@@ -223,6 +233,7 @@ void CLI::_printHelp() {
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
     term.println("  turn <graus>      → Girar no lugar (+ = esquerda), ex.: turn 90");
+    term.println("  move <cm>         → Andar e parar no alvo (+ = frente), ex.: move 50");
     term.println("  motors <L> <R>    → Teste remoto dos motores (passos/s), só IDLE, vale 0,5 s");
     term.println("  angle             → Ler ângulo atual");
     term.println("  raw               → Acelerômetro, gyro e temperatura");

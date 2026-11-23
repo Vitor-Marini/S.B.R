@@ -2,6 +2,7 @@
 #include "config.hpp"
 #include "balance.hpp"
 #include "net.hpp"
+#include "imu_manager.hpp"
 #include <math.h>
 
 VelocityController velCtrl;
@@ -16,12 +17,14 @@ void VelocityController::setTarget(float ms) {
     _targetVelocity = constrain(ms, -lim, lim);
     _lastCmdMs = millis();
     _turnActive = false;  // comando manual manda
+    _moveActive = false;
 }
 
 void VelocityController::setTurnRate(float degS) {
     _targetTurnRate = constrain(degS, -cfg.maxTurnRate, cfg.maxTurnRate);
     _lastCmdMs = millis();
     _turnActive = false;
+    _moveActive = false;
 }
 
 void VelocityController::turnBy(float deg) {
@@ -30,6 +33,19 @@ void VelocityController::turnBy(float deg) {
     _turnDone = 0.0f;
     _turnStartMs = millis();
     _turnActive = true;
+    _moveActive = false;
+}
+
+void VelocityController::moveBy(float m) {
+    _targetTurnRate = 0.0f;
+    _turnActive = false;
+    _moveGoal = m;
+    _moveDone = 0.0f;
+    _moveStartMs = millis();
+    _moveActive = true;
+    _moveBraking = _moveFailed = false;
+    _moveRefP = _moveRefV = 0.0f;
+    _velIntegral = 0.0f;
 }
 
 void VelocityController::update() {
@@ -59,6 +75,33 @@ void VelocityController::update() {
     // stepper não perde a velocidade comandada (sem encoder): ela é a velocidade da roda
     _estimatedVelocity = balance.getSpeed();
 
+    // move <cm>: em vez de mandar andar e "frear no ponto" (o robô freia devagar e passava 20–40 cm), gera uma
+    // trajetória de referência — posição e velocidade, trapezoidal a MOVE_ACCEL, que ele consegue seguir — e
+    // persegue as duas: a velocidade vira o alvo, o erro de posição entra como na malha de posição parada.
+    // No fim da trajetória a âncora fica no alvo e a malha de posição faz o resto.
+    float moveHold = 0.0f;
+    if (_moveActive) {
+        _moveDone += _estimatedVelocity * dt;
+        float goal = fabsf(_moveGoal), sgn = _moveGoal >= 0.0f ? 1.0f : -1.0f;
+        if (!_moveBraking) {
+            _moveRefV = fminf(fminf(_moveRefV + MOVE_ACCEL * dt, MOVE_SPEED),
+                              sqrtf(2.0f * MOVE_ACCEL * fmaxf(goal - _moveRefP, 0.0f)));
+            _moveRefP = fminf(_moveRefP + fmaxf(_moveRefV, 0.005f) * dt, goal);  // piso: não fica assintótico
+            _targetVelocity = sgn * _moveRefV;
+            _lastCmdMs = millis();
+            moveHold = constrain(-HOLD_KP * (_moveDone - sgn * _moveRefP), -HOLD_MAX_V, HOLD_MAX_V);
+            bool timeout = millis() - _moveStartMs > MOVE_TIMEOUT_MS;
+            if (_moveRefP >= goal || timeout) {
+                _moveBraking = true;  // trajetória acabou: daqui pra frente é a malha de posição no alvo
+                _moveFailed = timeout;
+                _targetVelocity = 0.0f;
+                _rampedTarget = 0.0f;
+                _holdArmed = true;
+                _holdPos = _moveDone - _moveGoal;
+            }
+        }
+    }
+
     // === Velocity PI → angle offset (°) ===
     // andando p/ frente além do alvo → offset negativo → inclina p/ trás → freia
     // rampa no alvo: degrau de velocidade vira tranco (o robô precisa inclinar antes de andar)
@@ -73,17 +116,29 @@ void VelocityController::update() {
     if (driving) {
         _holdArmed = false;
     } else {
-        if (!_holdArmed && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED) { _holdArmed = true; _holdPos = 0.0f; }
+        if (!_holdArmed && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED) {
+            _holdArmed = true;
+            _holdPos = 0.0f;
+        }
         if (_holdArmed) {
             _holdPos = constrain(_holdPos + _estimatedVelocity * dt, -HOLD_SLIP_M, HOLD_SLIP_M);
             holdVel = constrain(-HOLD_KP * _holdPos, -HOLD_MAX_V, HOLD_MAX_V);
+            // só responde quando assentou no alvo: um turn logo depois, com o robô ainda voltando, vira arco
+            bool settled = fabsf(_holdPos) < 0.02f && fabsf(_estimatedVelocity) < HOLD_ARM_SPEED;
+            if (_moveActive && _moveBraking && (settled || millis() - _moveStartMs > MOVE_TIMEOUT_MS)) {
+                term.printf(_moveFailed || !settled ? "move desistiu: %.1f cm\n" : "move ok: %.1f cm\n",
+                            (_moveGoal + _holdPos) * 100.0f);
+                _moveActive = false;
+            }
         }
     }
-    float velError = _rampedTarget + holdVel - _estimatedVelocity;
+    float velError = _rampedTarget + holdVel + moveHold - _estimatedVelocity;
 
     // Parado: só o P (+ a posição acima). Andando: + integral, que vence a resistência à rolagem;
     // ao parar, ele se esvazia em ~0,2 s.
-    if (driving) _velIntegral += velError * dt;
+    // no move o integral fica de fora: ∫(vref − v) já é o erro de posição, que o moveHold trata; os dois juntos
+    // somavam (medido: 0,36 m/s com alvo de 0,2 e 40 cm além do alvo; com vki 0, 0,24 m/s e 10 cm)
+    if (driving && !_moveActive) _velIntegral += velError * dt;
     else _velIntegral -= _velIntegral * dt / I_DECAY_S;
     if (cfg.velocityPid.ki > 0.0f) {
         float lim = I_MAX_DEG / cfg.velocityPid.ki;
@@ -102,7 +157,11 @@ void VelocityController::update() {
              && fabsf(cfg.pitchAngle - cfg.setpoint) < TRIM_MAX_ERR_DEG;
     _calmTicks = calm ? _calmTicks + 1 : 0;
     if (_calmTicks > TRIM_CALM_TICKS) {
-        cfg.setpoint = constrain(cfg.setpoint + _angleOffset * dt / TRIM_TAU_S,
+        // A posição só consegue pedir vkp × HOLD_MAX_V (~0,3°) de correção. Setpoint mais errado que isso: a posição
+        // satura e o robô vai embora devagar → aí aprende rápido. Perto do lugar, devagar (rápido sempre = oscilava).
+        bool holdSaturated = fabsf(_holdPos) > HOLD_MAX_V / HOLD_KP;
+        float tau = holdSaturated ? TRIM_TAU_FAST_S : TRIM_TAU_S;
+        cfg.setpoint = constrain(cfg.setpoint + _angleOffset * dt / tau,
                                  _spStart - TRIM_RANGE_DEG, _spStart + TRIM_RANGE_DEG);
         _trimmed = true;
     }
@@ -116,6 +175,9 @@ void VelocityController::update() {
     // Sem comando de giro a malha desliga: as rodas recebem a mesma velocidade e, com motor de passo, o
     // robô não gira. Ligada, ela seguiria o gyro Z, e um erro de zero dele (temperatura) vira giro lento parado.
     bool turning = _rampedTurn != 0.0f || _targetTurnRate != 0.0f;
+    // Sem comando de giro as rodas giram igual: o robô não gira (salvo patinar). O que o gyro Z ler é erro de
+    // zero (esquenta e muda; medido ~1,7 °/s derivando o yaw em ACTIVE): corrige devagar, como o trackGyroBias.
+    if (!turning) imu.trackGyroZ();
     float turnError = turning ? _rampedTurn - cfg.yawRate : 0.0f;
     if (turning) _turnIntegral += turnError * dt;
     else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
@@ -144,6 +206,7 @@ void VelocityController::reset() {
     _velIntegral = 0.0f;
     _turnIntegral = 0.0f;
     _turnActive = false;
+    _moveActive = false;
     _holdArmed = false;
     _estimatedVelocity = 0.0f;
     _calmTicks = 0;

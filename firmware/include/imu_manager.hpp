@@ -13,6 +13,7 @@ public:
     bool calibrateGyro(int samples = 500);  // false se o robô se mexeu (zero não alterado)
     void read();  // chamar exatamente a cada CONTROL_DT
     void trackGyroBias();  // só com o robô parado (IDLE)
+    void trackGyroZ();     // só o Z, equilibrando sem comando de giro (as rodas dizem que não está girando)
 
     float getPitch() { return _pitch; }
     float getPitchRate() { return _pitchRate; }

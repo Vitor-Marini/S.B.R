@@ -222,3 +222,21 @@ Pode ter atrapalhado testes antigos feitos no cabo sem a ponte aberta.
   escala de tempo. τ do auto-ajuste → 10 s: sobra ±3 cm / ~5 s, setpoint firme em ~1,25°.
 - "Anda sempre pra frente, mudar o setpoint não muda nada" = sintoma de `drive` chegando (andando, o integral
   come o erro de setpoint). Suspeita: analógico do DS4 com deriva; a página agora mostra os analógicos crus.
+
+## 2026-11-22 (noite): move, zero do gyro corrigido equilibrando, trajeto 2D
+
+- **`move <cm>`** + `tools/sbr.py` (SDK pelo WebSocket, sem a ponte). Frear "no ponto" passava 20–40 cm (o robô
+  freia a ~0,15 m/s² e antes acelera pra inclinar pra trás). Virou **trajetória de referência** (posição + velocidade,
+  trapezoidal a 0,15 m/s²); no move o integral de velocidade fica de fora (somava com a posição: 0,36 m/s com alvo
+  de 0,2; com `vki` 0, 0,24 m/s). `move ok` só quando assenta (senão o `turn` seguinte começava com o robô voltando
+  → arco: era o "infinito" no demo). Demo: move 50 → 49,6 cm, mas 15 s (atrasa ~1 s, passa 15 cm, vai e volta ±10 cm).
+- **Gyro Z**: parado sem comando o yaw andava ~1,7 °/s (rodas: 0°) → zero do Z corrigido equilibrando sem comando
+  de giro (τ 5 s). Depois: 0,8° em 17 s.
+- **Gyro Y**: pitch ficava ~1,1° acima do acelerômetro equilibrando (zero do gyro × τ do filtro) → o setpoint
+  "certo" mudava a cada sessão. Filtro complementar com integral (τ 20 s): diferença → ~0,1°. Setpoint real
+  (acelerômetro com o robô equilibrado, 2 gravações): **−1,7°**. O suporte segura em −1,5°.
+- Auto-ajuste rápido (τ 3 s) só com a posição saturada; lento (τ 10 s) perto do lugar. `HOLD_KP` 1,5 → 0,7.
+- Página: trajeto 2D ao vivo com rumo das rodas (`head`, novo no stream) e do gyro; analógicos crus.
+- **Limite da cascata**: a malha de velocidade tem ~1 s de atraso (inclinar antes de andar/frear); toda malha de
+  posição em cima (parado, move, empurrão) ou oscila ou demora. Parado: ±2,5 cm. Giro 180°: gyro 179°, rodas 189°
+  (patinou ou bitola ≠ 150 mm). Próximo grande passo: **LQR** (branch `feature/lqr-control`).

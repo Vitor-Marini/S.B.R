@@ -34,16 +34,19 @@ input{font:inherit;padding:10px;flex:3;background:#0d0f12;color:#eee;border:1px 
 <div class="leg"><b style="background:#4a90d9"></b>pitch (°)<b style="background:#d9a54a"></b>acel. (°)<b style="background:#888"></b>erro (°)</div><canvas id="c0"></canvas>
 <div class="leg"><b style="background:#4ad97a"></b>velocidade (m/s)<b style="background:#d94a4a"></b>pedida</div><canvas id="c1"></canvas>
 <div class="leg"><b style="background:#b04ad9"></b>giro (°/s)<b style="background:#d94a4a"></b>pedido</div><canvas id="c2"></canvas>
+<div class="leg">trajeto (grade 10 cm)<b style="background:#4ad97a"></b>rumo pelas rodas<b style="background:#d9a54a"></b>rumo pelo gyro</div>
+<canvas id="c3" style="height:300px"></canvas>
+<div class="row"><button onclick="trail=[]">limpar trajeto</button></div>
 <div class="row"><button onclick="csv()">baixar CSV (últimos 30 s)</button><button onclick="paused=!paused">pausar gráficos</button></div>
 <div id="log"></div>
 <form class="row" onsubmit="send(c.value);c.value='';return false"><input id="c" placeholder="comando (help, tune kp 0.35, angle...)" autocomplete="off" autocapitalize="off"><button style="flex:1">enviar</button></form>
 <script>
 const $=id=>document.getElementById(id);
 const STATES={0:'INIT',1:'CALIBRANDO',2:'IDLE',3:'STARTING',4:'ACTIVE',5:'MOVING',6:'FAULT'};
-const KEYS=['pitch','acc','gyroint','rate','yaw','speed','accel','err','voff','vtgt','yrate','wtgt','state','tick','temp'];
+const KEYS=['pitch','acc','gyroint','rate','yaw','speed','accel','err','voff','vtgt','yrate','wtgt','state','tick','head','temp'];
 const LEVELS=[0.1,0.2,0.3,0.4,0.5,0.65], W_MAX=45, DEAD=0.12, N=1500; // 30 s a 50 Hz
 LEVELS.forEach((v,i)=>$('lvl').add(new Option(v+' m/s',i))); $('lvl').value=2;
-let ws, buf='', cur={}, hist=[], frames=0, fps=0, paused=false, lastState=null;
+let trail=[], ws, buf='', cur={}, hist=[], frames=0, fps=0, paused=false, lastState=null;
 
 function add(t){const l=$('log'); l.textContent+=t+'\n'; if(l.textContent.length>20000) l.textContent=l.textContent.slice(-15000); l.scrollTop=1e9}
 function send(t){ if(ws&&ws.readyState==1) ws.send(t) }
@@ -55,7 +58,7 @@ function connect(){
     for(let l of lines){ while(l.startsWith('sbr> ')) l=l.slice(5);
       const m=l.match(/^>(\w+):(\S+)/);
       if(m){ cur[m[1]]=parseFloat(m[2]);
-        if(m[1]=='temp'){ frames++; cur.t=performance.now()/1000; hist.push(cur); if(hist.length>N) hist.shift(); cur={}; }
+        if(m[1]=='temp'){ frames++; cur.t=performance.now()/1000; track(cur); hist.push(cur); if(hist.length>N) hist.shift(); cur={}; }
       } else if(l.trim()) add(l); } };
 }
 setInterval(()=>{ fps=frames; frames=0; const f=hist[hist.length-1]||{};
@@ -116,8 +119,36 @@ function plot(id, series, minSpan){
 (function draw(){ if(!paused){
   plot('c0',[['err','#888'],['acc','#d9a54a'],['pitch','#4a90d9']],4);
   plot('c1',[['vtgt','#d94a4a'],['speed','#4ad97a']],0.2);
-  plot('c2',[['wtgt','#d94a4a'],['yrate','#b04ad9']],20); }
+  plot('c2',[['wtgt','#d94a4a'],['yrate','#b04ad9']],20); plotTrail(); }
   requestAnimationFrame(draw); })();
+
+// --- trajeto 2D: integra a velocidade das rodas com dois rumos (rodas e gyro). Se os dois divergem, um deles mente:
+// rodas = patinou; gyro = erro de zero. O robô parado não desenha nada.
+function track(f){ if(f.speed===undefined||f.head===undefined) return;
+  const last=trail[trail.length-1];  // rodas e gyro têm zeros diferentes: os dois partem de 0° no 1º ponto
+  if(!last){ trail.push({t:f.t,wx:0,wy:0,gx:0,gy:0,h0:f.head,y0:f.yaw||0}); return; }
+  const dt=Math.min(f.t-last.t,0.1), d=f.speed*dt, rw=(f.head-trail[0].h0)*Math.PI/180, rg=((f.yaw||0)-trail[0].y0)*Math.PI/180;
+  trail.push({t:f.t, wx:last.wx+d*Math.cos(rw), wy:last.wy+d*Math.sin(rw), gx:last.gx+d*Math.cos(rg), gy:last.gy+d*Math.sin(rg), rw, rg});
+  if(trail.length>9000) trail.shift(); }
+function plotTrail(){
+  const c=$('c3'), W=c.width=c.clientWidth*devicePixelRatio, H=c.height=c.clientHeight*devicePixelRatio, x=c.getContext('2d');
+  if(trail.length<2) return;
+  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const p of trail){ x0=Math.min(x0,p.wx,p.gx); x1=Math.max(x1,p.wx,p.gx); y0=Math.min(y0,p.wy,p.gy); y1=Math.max(y1,p.wy,p.gy); }
+  const span=Math.max(x1-x0,y1-y0,0.5)*1.15, s=Math.min(W,H)/span, cx=(x0+x1)/2, cy=(y0+y1)/2;
+  const P=(px,py)=>[W/2-(py-cy)*s, H/2-(px-cx)*s];  // frente inicial = pra cima, esquerda = esquerda
+  x.strokeStyle='#222'; x.lineWidth=1;
+  for(let g=Math.floor((cx-span)/0.1)*0.1; g<cx+span; g+=0.1){ const [a,b]=P(g,0); x.beginPath(); x.moveTo(0,b); x.lineTo(W,b); x.stroke(); }
+  for(let g=Math.floor((cy-span)/0.1)*0.1; g<cy+span; g+=0.1){ const [a,b]=P(0,g); x.beginPath(); x.moveTo(a,0); x.lineTo(a,H); x.stroke(); }
+  x.lineWidth=2*devicePixelRatio;
+  for(const [k,col] of [['g','#d9a54a'],['w','#4ad97a']]){ x.strokeStyle=col; x.beginPath();
+    trail.forEach((p,i)=>{ const [a,b]=P(p[k+'x'],p[k+'y']); i?x.lineTo(a,b):x.moveTo(a,b); }); x.stroke(); }
+  const p=trail[trail.length-1]; if(p.rw===undefined) return;
+  const [a,b]=P(p.wx,p.wy), [e,f]=P(p.wx+0.08*Math.cos(p.rw),p.wy+0.08*Math.sin(p.rw));
+  x.fillStyle='#4ad97a'; x.beginPath(); x.arc(a,b,5*devicePixelRatio,0,7); x.fill();
+  x.strokeStyle='#fff'; x.beginPath(); x.moveTo(a,b); x.lineTo(e,f); x.stroke();
+  x.fillStyle='#9aa'; x.font=11*devicePixelRatio+'px system-ui';
+  x.fillText(`rodas ${(p.rw*180/Math.PI).toFixed(0)}° · gyro ${(p.rg*180/Math.PI).toFixed(0)}°`,4,12*devicePixelRatio); }
 
 function csv(){ const t0=hist.length?hist[0].t:0;
   const rows=['t,'+KEYS.join(',')].concat(hist.map(f=>[(f.t-t0).toFixed(3)].concat(KEYS.map(k=>f[k])).join(',')));

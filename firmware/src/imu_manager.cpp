@@ -130,12 +130,21 @@ void IMUManager::trackGyroBias() {
     }
 }
 
+void IMUManager::trackGyroZ() {
+    _gyroOffsetZ += _gz * CONTROL_DT / 5.0f;  // τ = 5 s
+}
+
 void IMUManager::read() {
     const float dt = CONTROL_DT;
     _sample();
 
     const float a = cfg.filter.complementaryAlpha;
     _pitch = a * (_pitch + _pitchRate * dt) + (1.0f - a) * _accAngle;
+    // Erro de zero do gyro Y (muda ao esquentar) desloca o pitch em b·τ (τ = 1 s: 1 °/s → 1°, medido ~1° em ACTIVE)
+    // e o setpoint "certo" muda junto. Na média, pitch tem que bater com o acelerômetro (o robô não acelera
+    // pra sempre): a diferença que sobra é o erro de zero → corrige devagar (filtro complementar com integral).
+    const float tauF = a * dt / (1.0f - a);
+    _gyroOffsetY -= radians((_pitch - _accAngle) / tauF) * dt / 20.0f;  // τ = 20 s
     _gyroAngle += _pitchRate * dt;
     _accFast += (_accAngle - _accFast) * dt / 0.3f;  // para o detector de "parado" do trackGyroBias
     _accSlow += (_accAngle - _accSlow) * dt / 2.0f;

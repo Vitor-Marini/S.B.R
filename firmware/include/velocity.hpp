@@ -8,7 +8,8 @@ public:
     void begin();
     void setTarget(float ms);
     void setTurnRate(float degS);
-    void turnBy(float deg);  // gira X graus no lugar (+ = esquerda) pelo gyro Z; drive/stop cancelam
+    void turnBy(float deg);
+    void moveBy(float m);    // anda X metros (+ = frente) pela odometria e para no alvo; drive/stop cancelam  // gira X graus no lugar (+ = esquerda) pelo gyro Z; drive/stop cancelam
     float getTarget() { return _targetVelocity; }
     float getRampedTarget() { return _rampedTarget; }
     float spAtStart() { return _spStart; }   // setpoint quando o ACTIVE começou
@@ -38,10 +39,17 @@ private:
     bool _trimmed = false;
     bool _holdArmed = false;
     float _holdPos = 0.0f;                            // m andados desde a âncora (parado)
-    static constexpr float HOLD_KP = 1.5f;            // 1/s: 2 cm fora → pede 3 cm/s de volta
+    static constexpr float HOLD_KP = 0.7f;            // 1/s: 1,5 tocava ±10 cm (~6 s): rápido demais pra malha de velocidade
     static constexpr float HOLD_MAX_V = 0.08f;        // m/s máx que a posição pede
     static constexpr float HOLD_SLIP_M = 0.50f;       // m: empurrão volta pro lugar; além disso aceita o lugar novo
     static constexpr float HOLD_ARM_SPEED = 0.03f;    // m/s: ancora quando a roda quase para
+    bool _moveActive = false, _moveBraking = false, _moveFailed = false;
+    float _moveGoal = 0.0f, _moveDone = 0.0f;  // m pedidos / m andados
+    uint32_t _moveStartMs = 0;
+    static constexpr float MOVE_SPEED = 0.2f;         // m/s máx do move
+    float _moveRefP = 0.0f, _moveRefV = 0.0f;         // trajetória de referência do move (m, m/s, em módulo)
+    static constexpr float MOVE_ACCEL = 0.15f;        // m/s²: o que o robô consegue seguir (frenagem real ~0,15)
+    static constexpr uint32_t MOVE_TIMEOUT_MS = 15000;
     bool _turnActive = false;
     float _turnGoal = 0.0f, _turnDone = 0.0f;  // ° pedidos / ° girados (gyro Z integrado)
     uint32_t _turnStartMs = 0;
@@ -53,6 +61,7 @@ private:
     static constexpr float TRIM_MAX_RATE = 20.0f;    // °/s
     static constexpr float TRIM_MAX_ERR_DEG = 3.0f;  // ° de pitch longe do setpoint
     static constexpr uint32_t TRIM_CALM_TICKS = 400; // 2 s calmo antes de começar
+    static constexpr float TRIM_TAU_FAST_S = 3.0f;  // com a posição saturada (setpoint bem errado)
     static constexpr float TRIM_TAU_S = 10.0f;   // bem mais lento que a malha de posição (2,5 s brigava com ela: oscilação de ~15 s)
     static constexpr float TRIM_RANGE_DEG = 1.5f;    // máximo que se afasta do setpoint do start
     static constexpr float TARGET_ACCEL = 0.6f;  // m/s² (rampa de arrancada e frenagem)
