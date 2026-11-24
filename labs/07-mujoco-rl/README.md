@@ -3,7 +3,7 @@
 > **In one sentence:** a physics simulator of the robot, trustworthy because it reproduces the real robot with the
 > real controllers — the playground where a neural network can learn to balance.
 
-**Status:** 🟡 step 1 done (simulator validated). Next: train a policy and compare it with LQR.
+**Status:** 🟡 simulator validated · policy trained (matches LQR in simulation). Next: run it on the ESP32-C3.
 
 ## Why simulate first
 
@@ -64,10 +64,28 @@ python3 -m venv --system-site-packages .venv && .venv/bin/pip install "mujoco==3
 .venv/bin/python labs/07-mujoco-rl/sim.py view pid    # same with the PID cascade
 ```
 
+## Step 2: training a policy (`env.py`, `train.py`)
+
+The network replaces exactly the LQR's job: every 5 ms it gets what the firmware measures (filtered pitch, pitch
+rate, wheel speed, position error, last action) and outputs a wheel acceleration (±4 m/s², the firmware cap).
+Reward = 1 per step standing − the LQR's own cost (Bryson weights). Each episode is a slightly different robot
+(L ±20 %, mass ±10 %, torque 0.2–0.4 N·m, friction 0.5–1.0, noise, dirt) with random pushes up to 6 N.
+
+PPO, 2×32 network, 3M steps on 8 CPU processes: **~6 minutes**.
+
+| episode length (10 s = never falls, with random pushes) | 0.3M: 2.3 s · 0.9M: 6.5 s · 2.1M: 7.4 s · 3.0M: 8.3 s |
+|---|---|
+
+| | still: x range | pitch jitter | biggest push | 20 random robots |
+|---|---|---|---|---|
+| LQR as a policy | ±0.6 cm | ±0.43° | 4 N | 20/20 stand |
+| **PPO policy** | ±1.1 cm | **±0.18°** | 4 N | **20/20 stand** |
+
+A network that knows no physics matched the LQR in minutes: firmer body, a bit more drift (the reward weights
+decide that trade). Watch it: `.venv/bin/python labs/07-mujoco-rl/train.py view` (P push · L LQR/policy · R random robot).
+
 ## Next
 
-1. Gymnasium environment around `Sim` (observation: filtered pitch, rate, wheel speed, position error; action: wheel
-   acceleration), with **domain randomization** (L, torque limit, friction, noise, delay).
-2. Train with PPO (stable-baselines3), compare with LQR on the same scenarios.
+1. ✅ Gymnasium environment with domain randomization. 2. ✅ PPO, compared with LQR.
 3. Export the small network to C, time it on the ESP32-C3 (no FPU), try it on the robot as `ctl rl`.
 4. Later: the same `model/params.json` → URDF → Isaac Sim on the RTX 4060 Ti machine (lab 08).

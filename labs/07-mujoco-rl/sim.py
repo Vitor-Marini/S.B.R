@@ -68,8 +68,9 @@ class FirmwareLQR:
 class Sim:
     """Physics at 1 ms, control at 5 ms with the firmware's complementary filter and a 1-tick sensor delay."""
 
-    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None):
-        self.m = mujoco.MjModel.from_xml_string(build_mjcf.build(P))
+    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None, params=None):
+        params = params or P                       # a different robot (domain randomization) or the real one
+        self.m = mujoco.MjModel.from_xml_string(build_mjcf.build(params))
         self.d = mujoco.MjData(self.m)
         if pitch0:
             q = np.zeros(4)
@@ -80,7 +81,7 @@ class Sim:
         self.rng = np.random.default_rng(seed)
         self.noise = gyro_noise
         # random pitch torque on the body (motor vibration, backlash, uneven floor): the real robot's "dirt"
-        self.dist = P["disturbance_torque"] if disturbance is None else disturbance
+        self.dist = params["disturbance_torque"] if disturbance is None else disturbance
         self.sub = int(round(DT / self.m.opt.timestep))
         self.pitch = self.true_pitch()
         self.delayed = (self.pitch, 0.0)

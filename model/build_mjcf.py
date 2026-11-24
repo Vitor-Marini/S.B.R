@@ -24,6 +24,7 @@ def build(p=None):
     sx, sy, sz = b["size"]
     ixx = mass * (sy ** 2 + sz ** 2) / 12                       # roll / yaw: box estimate (barely matter here)
     izz = mass * (sx ** 2 + sy ** 2) / 12
+    ixx = min(ixx, iyy + izz)                                   # a real body needs A + B >= C (small L broke it)
     r, hw, ty = w["radius"], w["width"] / 2, w["track"] / 2
     iw_spin = w["mass"] * r * r / 2
     iw_other = w["mass"] * (3 * r * r + w["width"] ** 2) / 12
