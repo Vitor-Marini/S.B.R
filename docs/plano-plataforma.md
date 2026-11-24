@@ -101,3 +101,14 @@ Fase 1 entregue com limitações: `tools/sbr.py` (inclui `medir <cm>`) e `move`.
 14 medições → `hkp` 0,7, `mva` 0,1, `mvs` 0,15: termina a 1–3 cm do alvo, mas passa 3–15 cm e leva ~6–8 s
 ("assentou" = 3 cm, o tamanho do balanço parado). Nenhum ajuste tirou o passa-do-alvo. A solução de fundo é o LQR (`feature/lqr-control`): a cascata
 equilíbrio → velocidade → posição tem atraso demais pra parar rápido sem passar do ponto.
+
+## Fase 2 com Kinect v1 (2026-11-24), sem tags
+
+Sem impressora: a localização usa o **Kinect v1** (profundidade funciona no escuro). `tools/kinect.py`:
+- libfreenect_sync por ctypes (já instalado), profundidade em mm alinhada à cor, motor de inclinação (−27°);
+- chão por RANSAC (Kinect a 0,82 m, 29° pra baixo), robô = bolha 3–45 cm acima do chão, ≤ 35 cm no chão, topo ≥ 14 cm;
+- **validado**: `move 50` → Kinect mediu 50,9 cm (2 %), tremor ±1 mm parado; ao vivo a 30 quadros/s com mapa visto de cima;
+- rastreio segue a última posição (15 cm); perdido por 1 s, pega o candidato mais perto de onde sumiu.
+
+Aberto: na partida às vezes agarra outra coisa até limpar o trajeto (`c`) → escolher o robô clicando nele.
+Próximo: **rumo** (gyro do robô alinhado ao Kinect por um `move` reto) e **`goto(x, y)`** clicando no mapa.
