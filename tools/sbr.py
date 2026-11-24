@@ -37,18 +37,31 @@ class Robot:
         self.on_frame = on_frame  # callback(frame) a cada quadro (roda na thread de leitura)
         self.lines = queue.Queue()  # linhas de texto do terminal (respostas, avisos)
         self._cur, self._buf = {}, ""
-        self._sock = socket.create_connection((host, port), timeout=5)
-        _handshake(self._sock, host)
-        self._sock.settimeout(None)
+        self._addr = (host, port)
         self._lock = threading.Lock()
         self._alive = True
-        threading.Thread(target=self._reader, daemon=True).start()
-        self.send("stream on")
+        self._connect()
+
+    def _connect(self):
+        sock = socket.create_connection(self._addr, timeout=5)
+        _handshake(sock, self._addr[0])
+        sock.settimeout(None)
+        self._sock, self._buf, self._cur = sock, "", {}
+        threading.Thread(target=self._reader, args=(sock,), daemon=True).start()
+        with self._lock:
+            sock.sendall(_ws_frame(b"stream on"))
 
     # --- comandos
     def send(self, line):
-        with self._lock:
-            self._sock.sendall(_ws_frame(line.encode()))
+        """Manda uma linha; se o WiFi derrubou a conexão, reconecta uma vez e manda de novo."""
+        try:
+            with self._lock:
+                self._sock.sendall(_ws_frame(line.encode()))
+        except OSError:
+            self.frame = {}                       # quadro velho não vale (ex.: state ACTIVE de antes da queda)
+            self._connect()
+            with self._lock:
+                self._sock.sendall(_ws_frame(line.encode()))
 
     def drive(self, v, w=0.0):
         """m/s (+ frente), °/s (+ esquerda). Vale 0,5 s: repetir enquanto quiser andar."""
@@ -111,14 +124,15 @@ class Robot:
         self.halt()
         raise TimeoutError(f"sem resposta para '{cmd}'")
 
-    def _reader(self):
+    def _reader(self, sock):
         try:
-            for text in _ws_messages(self._sock, self._lock):
+            for text in _ws_messages(sock, self._lock):
                 self._feed(text)
         except OSError:
             pass
-        if self._alive:
+        if self._alive and sock is self._sock:
             self.lines.put("!! conexão com o robô caiu")
+            self.frame = {}
 
     def _feed(self, text):
         self._buf += text
