@@ -112,3 +112,10 @@ Sem impressora: a localização usa o **Kinect v1** (profundidade funciona no es
 
 Aberto: na partida às vezes agarra outra coisa até limpar o trajeto (`c`) → escolher o robô clicando nele.
 Próximo: **rumo** (gyro do robô alinhado ao Kinect por um `move` reto) e **`goto(x, y)`** clicando no mapa.
+
+### Estado em 2026-11-25: pausado
+
+`tools/navegar.py` funciona: clique no robô, clique (ou arraste, pra escolher a direção final) no mapa e ele vai;
+mostra área da câmera, obstáculos e o trajeto; para ao perder o rastreio, ao cair ou ao sair da área (até 2,3 m).
+Pausado porque o Kinect baixo (0,8 m) cobre pouca área e tapa atrás dos objetos; o salto seria a câmera pendurada
+olhando pra baixo. Ficou de fora: desviar de obstáculos (A*), missões, mapa na página web.
