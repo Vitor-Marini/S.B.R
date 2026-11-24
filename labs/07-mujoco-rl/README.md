@@ -57,7 +57,9 @@ pushes better and a hard hit that saturates the wheel speed knocks it down.
 ## Run it
 
 ```bash
-python3 -m venv --system-site-packages .venv && .venv/bin/pip install "mujoco==3.17.0" "numpy<2"   # once
+python3 -m venv --system-site-packages .venv                                                    # once
+.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu                    # CPU-only torch (~200 MB)
+.venv/bin/pip install "mujoco==3.17.0" "gymnasium==1.0.0" "stable-baselines3==2.4.1" "numpy==1.24.4"  # numpy <1.25: system SciPy
 .venv/bin/python model/build_mjcf.py                  # writes model/sbr.xml (optional: python -m mujoco.viewer --mjcf model/sbr.xml)
 .venv/bin/python labs/07-mujoco-rl/sim.py             # validation report (~2 s)
 .venv/bin/python labs/07-mujoco-rl/sim.py view        # 3D, real time, LQR: P push · M move +50 cm · N move −50 cm
