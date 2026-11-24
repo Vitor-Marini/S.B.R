@@ -257,3 +257,12 @@ Pode ter atrapalhado testes antigos feitos no cabo sem a ponte aberta.
   179,1°; terminou a ~10 cm do início (cascata: 15 s por move e falhava). Rodas contam ~5 % a mais no giro que o gyro
   (bitola real ≠ 150 mm?).
 - Aberto: rejuntes devagar às vezes derrubam (roda patina ou perde passo? Vref nunca medido); limite de 0,8 m/s.
+
+## 2026-11-23: giro calibrado
+
+- `turn ±1800` com fita: gyro errou ~3° em 5 voltas nos dois sentidos (`gzs` 1,002). Rodas contaram 4,9 % (esq.,
+  com rejunte) e 8,7 % (dir., sem rejunte) a mais com bitola 150 mm → `track` 0,160 (média). Rodas não estão
+  frouxas: a diferença é escorregamento desigual dos pneus no giro no lugar. `turn` para a 0,3° (antes 1°).
+- Demo depois: move 48,8 / 48,9 cm em 4,8 s, turn 179,7° / 179,7°. **Medido com fita: terminou a ~0,5 cm do
+  início e < 1° torto.** Na volta do meio o robô estava visivelmente fora da linha (deslocou no 1º giro); o 2º giro,
+  simétrico, compensou.
