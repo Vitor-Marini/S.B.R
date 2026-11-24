@@ -23,6 +23,17 @@ def arr(name, a):
     return f"static const float {name}[{a.size}] = {{{flat}}};\n"
 
 
+def q(a, bits=12):
+    """Float → fixed point with `bits` fractional bits (rounded)."""
+    return np.round(np.asarray(a, np.float64) * (1 << bits)).astype(np.int64)
+
+
+def iarr(name, a, ctype):
+    lim = 32767 if ctype == "int16_t" else 2**31 - 1
+    assert np.abs(a).max() <= lim, f"{name} overflows {ctype}"
+    return f"static const {ctype} {name}[{a.size}] = {{{', '.join(str(int(v)) for v in a.flatten())}}};\n"
+
+
 def export(model_path):
     from stable_baselines3 import PPO
     model = PPO.load(model_path, device="cpu")
@@ -35,23 +46,39 @@ def export(model_path):
 // Do not edit: retrain and export again. Same inputs/outputs as labs/07-mujoco-rl/env.py:
 //   in:  pitch/10°, rate/100 °/s, wheel speed/0.5 m/s, position error/0.2 m, last action
 //   out: wheel acceleration / 4 m/s², clipped to ±1
-#include <math.h>
 
-{arr("RL_W1", w1)}{arr("RL_B1", b1)}{arr("RL_W2", w2)}{arr("RL_B2", b2)}{arr("RL_W3", w3)}{arr("RL_B3", b3)}
+// FIXED POINT: the ESP32-C3 has no FPU. In float this took 3.2 ms (tanhf) and still 2.2 ms with a tanh table: every
+// multiply is emulated. In integers (hardware multiply) it's tens of us. Weights and activations are Q12 (×4096),
+// sums of products are Q24 in int32 (weights < 1, inputs clamped to ±8: no overflow).
+#include <stdint.h>
+{iarr("RL_W1", q(w1), "int16_t")}{iarr("RL_B1", q(b1, 24), "int32_t")}{iarr("RL_W2", q(w2), "int16_t")}{iarr("RL_B2", q(b2, 24), "int32_t")}{iarr("RL_W3", q(w3), "int16_t")}{iarr("RL_B3", q(b3, 24), "int32_t")}{iarr("RL_TANH", q(np.tanh(np.linspace(-4, 4, 257))), "int16_t")}
+// tanh by table on [-4, 4] (256 steps of 1/32 = 128 in Q12) with linear interpolation; beyond: ±1
+static inline int32_t rl_tanh_q(int32_t s) {{
+    if (s >= 16384) return 4096;
+    if (s <= -16384) return -4096;
+    int32_t u = s + 16384, i = u >> 7, f = u & 127;
+    return RL_TANH[i] + (((int32_t)(RL_TANH[i + 1] - RL_TANH[i]) * f) >> 7);
+}}
+
 static inline float rl_policy(const float in[5]) {{
-    float h1[32], h2[32];
-    for (int i = 0; i < 32; i++) {{
-        float s = RL_B1[i];
-        for (int k = 0; k < 5; k++) s += RL_W1[i * 5 + k] * in[k];
-        h1[i] = tanhf(s);
+    int32_t x[5], h1[32], h2[32];
+    for (int k = 0; k < 5; k++) {{
+        float v = in[k] * 4096.0f;
+        x[k] = v > 32767.0f ? 32767 : (v < -32767.0f ? -32767 : (int32_t)v);
     }}
     for (int i = 0; i < 32; i++) {{
-        float s = RL_B2[i];
+        int32_t s = RL_B1[i];
+        for (int k = 0; k < 5; k++) s += RL_W1[i * 5 + k] * x[k];
+        h1[i] = rl_tanh_q(s >> 12);
+    }}
+    for (int i = 0; i < 32; i++) {{
+        int32_t s = RL_B2[i];
         for (int k = 0; k < 32; k++) s += RL_W2[i * 32 + k] * h1[k];
-        h2[i] = tanhf(s);
+        h2[i] = rl_tanh_q(s >> 12);
     }}
-    float a = RL_B3[0];
-    for (int k = 0; k < 32; k++) a += RL_W3[k] * h2[k];
+    int32_t s = RL_B3[0];
+    for (int k = 0; k < 32; k++) s += RL_W3[k] * h2[k];
+    float a = s / 16777216.0f;
     return a > 1.0f ? 1.0f : (a < -1.0f ? -1.0f : a);
 }}
 """
@@ -74,7 +101,7 @@ def check(model):
         subprocess.run(["gcc", "-O2", src, "-o", os.path.join(d, "t"), "-lm"], check=True)
         out = np.array(subprocess.run([os.path.join(d, "t")], capture_output=True, text=True, cwd=d).stdout.split(), float)
     err = np.abs(out - ref).max()
-    assert len(out) == 1000 and err < 1e-4, f"C and PyTorch differ by {err}"
+    assert len(out) == 1000 and err < 1e-2, f"C and PyTorch differ by {err}"   # fixed point + table tanh
     return err
 
 
