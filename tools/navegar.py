@@ -30,6 +30,7 @@ ARRIVE = 0.04         # m: chegou
 ALIGN_DIST = 0.10     # m: anda reto isso pra descobrir o rumo no mapa
 FACE_TOL = 3.0        # °: virou pra direção pedida
 MAX_RANGE = 2.3       # m à frente da câmera: medido, começa a falhar ~2,5 m (perto da borda)
+LOST_GIVEUP = 0.5     # s sem achar o robô no Kinect: desiste do alvo
 MARGIN = 0.20         # m: alvo longe da borda do que a câmera vê (o robô inteiro tem que caber na imagem)
 
 
@@ -60,13 +61,15 @@ class Navigator:
         self.state = "parado"
         self._align_from = None
         self._seg = None          # trecho reto pra refinar o offset (posição, yaw)
+        self._lost = None         # desde quando o Kinect não acha o robô
+        self.why = ""             # por que parou (mostrado no mapa)
 
     def heading(self):
         yaw = self.robot.frame.get("yaw")
         return None if yaw is None or self.offset is None else wrap(yaw + self.offset)
 
     def go(self, goal, face=None):
-        self.goal, self.face = goal, face
+        self.goal, self.face, self._lost, self.why = goal, face, None, ""
         self.state = "indo" if self.offset is not None else "alinhando"
         self._align_from = None
 
@@ -84,8 +87,15 @@ class Navigator:
             self.offset = None
             return
         if pos is None:
-            self.robot.halt()        # perdeu o robô no Kinect: espera parado
+            # perdeu o robô no Kinect: para na hora; 0,5 s sem achar, desiste do alvo (não volta a andar sozinho
+            # quando "reencontrar", que pode ser outra coisa)
+            self.robot.halt()
+            self._lost = self._lost or time.time()
+            if time.time() - self._lost > LOST_GIVEUP:
+                self.cancel()
+                self.why = "parou: perdeu o robo"
             return
+        self._lost = None
         yaw = self.robot.frame["yaw"]
         if self.state == "alinhando":
             if self._align_from is None:
@@ -240,6 +250,8 @@ def main(host):
             cv2.polylines(m, [fov], True, (140, 140, 140), 1)
             yl = kinect.to_map(MAX_RANGE, 0)[1]
             cv2.line(m, (0, yl), (m.shape[1], yl), (0, 140, 255), 1)    # limite de alcance
+            if nav.why:
+                msg, msg_t, nav.why = nav.why, time.time(), ""
             if time.time() - msg_t < 2:
                 cv2.putText(m, msg, (8, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             if obs_img is not None:
@@ -317,6 +329,15 @@ def _selftest():
     nav2.go((1, 1))
     nav2.step((fr2.x, fr2.y))
     assert nav2.state == "parado" and nav2.offset is None
+    fr3 = FakeRobot()                                  # perdeu o robô no Kinect: para e, depois de 0,5 s, desiste
+    nav3 = Navigator(fr3)
+    nav3.go((1.0, 0.0))
+    nav3.step((0.0, 0.0)); fr3.v = 0.1
+    nav3.step(None)
+    assert fr3.v == 0 and nav3.state != "parado"
+    nav3._lost -= LOST_GIVEUP + 0.1
+    nav3.step(None)
+    assert nav3.state == "parado" and nav3.why
     import cv2
     w_, h_ = kinect.to_map(kinect.MAP_X[0], kinect.MAP_Y[0])
     oi = np.zeros((h_, w_), np.uint8)
