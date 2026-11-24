@@ -172,7 +172,13 @@ def blocked(obs_img, a, b, robot_r=0.10):
 
 def main(host):
     import cv2
-    robot = sbr.Robot(host)
+    while True:                                   # robô desligado (poupando bateria): espera ele aparecer
+        try:
+            robot = sbr.Robot(host)
+            break
+        except OSError:
+            print("esperando o robô na rede...")
+            time.sleep(2)
     nav = Navigator(robot)
     d = kinect.depth_mm()
     P, _, _ = kinect.points(d)

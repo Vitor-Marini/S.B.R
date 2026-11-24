@@ -59,9 +59,12 @@ class Robot:
                 self._sock.sendall(_ws_frame(line.encode()))
         except OSError:
             self.frame = {}                       # quadro velho não vale (ex.: state ACTIVE de antes da queda)
-            self._connect()
-            with self._lock:
-                self._sock.sendall(_ws_frame(line.encode()))
+            try:
+                self._connect()
+                with self._lock:
+                    self._sock.sendall(_ws_frame(line.encode()))
+            except OSError:                       # robô desligado/fora da rede: quem chama vê frame vazio
+                self.lines.put("!! robô fora da rede")
 
     def drive(self, v, w=0.0):
         """m/s (+ frente), °/s (+ esquerda). Vale 0,5 s: repetir enquanto quiser andar."""
