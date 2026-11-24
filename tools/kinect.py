@@ -4,7 +4,8 @@
 Fase 2 da plataforma (docs/plano-plataforma.md), passo 1: ver o que o Kinect vê.
 Precisa do libfreenect0.5 (já instalado: apt libfreenect-dev) e do Kinect na fonte + USB.
 
-    python3 tools/kinect.py           → janelas com cor e profundidade; clique = distância no ponto; q sai
+    python3 tools/kinect.py           → ao vivo: profundidade com o robô marcado + mapa visto de cima com o trajeto;
+                                        clique na profundidade = distância no ponto; c limpa o trajeto; q sai
     python3 tools/kinect.py snap DIR  → salva DIR/cor.png e DIR/prof.png (pra conferir sem tela)
     python3 tools/kinect.py tilt GRAUS → motor de inclinação (−27 a +27; negativo = olhar pra baixo)
     python3 tools/kinect.py chao DIR   → acha o plano do chão e o robô (bolha acima do chão); salva DIR/chao.png
@@ -109,8 +110,9 @@ def floor_frame(n, c):
     return o, ex, ey
 
 
-def find_robot(d, n, c, hmin=0.03, hmax=0.45, min_px=150, max_size=0.35):
-    """Maior bolha entre hmin e hmax acima do chão com no máximo max_size m no chão. Devolve (x, y no chão em m, pixels, altura máx, máscara)."""
+def find_robot(d, n, c, hmin=0.03, hmax=0.45, min_px=150, max_size=0.35, top_min=0.14, near=None, gate=0.15):
+    """Maior bolha entre hmin e hmax acima do chão com no máximo max_size m no chão. Com near=(x, y): só a mais
+    perto dessa posição, até gate m (rastreio: não pula pros seus pés ou pro pé de um móvel). Devolve (x, y no chão em m, pixels, altura máx, máscara)."""
     import cv2
     P, v, u = points(d)
     h = P @ n + c
@@ -128,10 +130,95 @@ def find_robot(d, n, c, hmin=0.03, hmax=0.45, min_px=150, max_size=0.35):
         q = P[blob] - np.outer(P[blob] @ n + c, n) - o   # pontos da bolha projetados no chão
         fx, fy = q @ ex, q @ ey
         # tamanho no chão de robô (o rodapé da parede ou um móvel é uma bolha maior que isso)
-        if max(np.ptp(fx), np.ptp(fy)) > max_size or (best and blob.sum() <= best[2]):
+        # tamanho e altura de robô (o rodapé, um móvel, um pé ou um chinelo não passam)
+        if max(np.ptp(fx), np.ptp(fy)) > max_size or h[blob].max() < top_min:
             continue
-        best = (float(fx.mean()), float(fy.mean()), int(blob.sum()), float(h[blob].max()), lab == i)
-    return best
+        x, y = float(fx.mean()), float(fy.mean())
+        score = -np.hypot(x - near[0], y - near[1]) if near else blob.sum()
+        if near and -score > gate:
+            continue
+        if best is None or score > best[0]:
+            best = (score, (x, y, int(blob.sum()), float(h[blob].max()), lab == i))
+    return best[1] if best else None
+
+
+MAP_PX = 200                      # px por metro no mapa
+MAP_X = (0.3, 3.3)                # m à frente da câmera (vertical do mapa)
+MAP_Y = (-1.5, 1.5)               # m pro lado (horizontal; esquerda = esquerda)
+
+
+def to_map(x, y):
+    return int((MAP_Y[1] - y) * MAP_PX), int((MAP_X[1] - x) * MAP_PX)
+
+
+def draw_map(trail):
+    """Mapa do chão visto de cima: grade de 10 cm (linha forte a cada 50), câmera embaixo, trajeto e o robô."""
+    import cv2
+    w, h = to_map(MAP_X[0], MAP_Y[0])
+    img = np.full((h, w, 3), 24, np.uint8)
+    for i in range(int(MAP_Y[0] * 10), int(MAP_Y[1] * 10) + 1):
+        u = to_map(0, i / 10)[0]
+        cv2.line(img, (u, 0), (u, h), (70, 70, 70) if i % 5 == 0 else (40, 40, 40), 1)
+    for i in range(int(MAP_X[0] * 10), int(MAP_X[1] * 10) + 1):
+        v = to_map(i / 10, 0)[1]
+        cv2.line(img, (0, v), (w, v), (70, 70, 70) if i % 5 == 0 else (40, 40, 40), 1)
+        if i % 5 == 0:
+            cv2.putText(img, f"{i / 10:.1f} m", (4, v - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
+    cv2.circle(img, to_map(MAP_X[0], 0), 6, (255, 200, 0), -1)          # lado da câmera
+    for p, q in zip(trail, trail[1:]):
+        if p is not None and q is not None:
+            cv2.line(img, to_map(*p), to_map(*q), (0, 200, 0), 2)
+    if trail and trail[-1] is not None:
+        cv2.circle(img, to_map(*trail[-1]), 10, (0, 255, 0), 2)
+        x, y = trail[-1]
+        cv2.putText(img, f"x {x:.2f}  y {y:+.2f} m", (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return img
+
+
+def live():
+    """Ao vivo: chão medido uma vez no começo (o Kinect não se mexe), robô procurado a cada quadro."""
+    import cv2
+    import time
+    d = depth_mm()
+    P, _, _ = points(d)
+    n, c = fit_floor(P[:: max(1, len(P) // 20000)])
+    print(f"chão: câmera a {c:.2f} m, {np.degrees(np.arccos(abs(n[1]))):.0f}° pra baixo")
+    trail, click, t0, frames, fps, seen, last = [], {}, time.time(), 0, 0, 0.0, None
+    cv2.namedWindow("profundidade")
+    cv2.setMouseCallback("profundidade", lambda ev, x, y, *_: ev == cv2.EVENT_LBUTTONDOWN and click.update(p=(x, y)))
+    while True:
+        d = depth_mm()
+        img = colorize(d)
+        # segue a última posição (até 15 cm); perdido por mais de 1 s, pega o candidato mais perto de onde ele
+        # sumiu, em qualquer distância (ele costuma voltar por onde saiu)
+        tracking = trail and trail[-1] is not None and time.time() - seen < 1.0
+        r = find_robot(d, n, c, near=last, gate=0.15 if tracking else 99.0)
+        if r:
+            seen, last = time.time(), r[:2]
+            x, y, px, hm, mask = r
+            cnt, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(img, cnt, -1, (255, 255, 255), 2)
+            last = trail[-1] if trail else None
+            if last is None or np.hypot(x - last[0], y - last[1]) > 0.005:   # 5 mm: não desenha o tremor
+                trail = (trail + [(x, y)])[-2000:]
+        elif trail and trail[-1] is not None and time.time() - seen > 1.0:
+            trail.append(None)                                               # perdeu: não liga os pontos
+        if "p" in click:
+            u, v = click["p"]
+            cv2.circle(img, (u, v), 4, (255, 255, 255), 1)
+            cv2.putText(img, f"{d[v, u]} mm", (u + 6, v - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        frames += 1
+        if time.time() - t0 > 1:
+            fps, frames, t0 = frames / (time.time() - t0), 0, time.time()
+        cv2.putText(img, f"{fps:.0f} quadros/s" + ("" if r else "  sem robo"), (8, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.imshow("profundidade", img)
+        cv2.imshow("mapa (visto de cima)", draw_map(trail))
+        k = cv2.waitKey(1) & 0xFF
+        if k == ord("q"):
+            break
+        if k == ord("c"):
+            trail = []
 
 
 def stop():
@@ -161,13 +248,16 @@ def main():
         t0, _, _ = depth_at(0.0)
         t1, x1, y1 = depth_at(0.25)
         box = (np.abs(x1 - 2.0) < 0.1) & (np.abs(y1 - 0.3) < 0.1) & (t1 > 0)
+        box |= (np.abs(x1 - 1.2) < 0.1) & (np.abs(y1 + 0.4) < 0.1) & (t1 > 0)   # outra "coisa" do tamanho do robô
         dz = np.where(box, t1, t0)
         dsyn = np.where((dz > 0.5) & (dz < 5), dz * 1000, 0).astype(np.uint16)
         Ps = points(dsyn)[0]
         n2, c2 = fit_floor(Ps[::20])
         assert abs(c2 - Hc) < 0.02, f"altura da câmera {c2}"
         rr = find_robot(dsyn, n2, c2)
+        rr = find_robot(dsyn, n2, c2, near=(1.95, 0.32))          # rastreio: segue a do lado, não a maior
         assert rr and abs(rr[0] - 2.0) < 0.05 and abs(rr[1] - 0.3) < 0.05, f"robô em {rr and rr[:2]}"
+        assert find_robot(dsyn, n2, c2, near=(0.6, 0.0)) is None, "longe de tudo: nada"
         print("selftest ok (libfreenect_sync carregou; chão e bolha sintéticos achados)")
         return
     try:
@@ -207,20 +297,7 @@ def main():
             print(f"salvo em {out}: profundidade válida em {100 * ok.size / d.size:.0f}% dos pixels, "
                   f"{ok.min() if ok.size else 0}–{ok.max() if ok.size else 0} mm")
             return
-        click = {}
-        cv2.namedWindow("profundidade")
-        cv2.setMouseCallback("profundidade", lambda ev, x, y, *_: ev == cv2.EVENT_LBUTTONDOWN and click.update(p=(x, y)))
-        while True:
-            d, c = depth_mm(), rgb()
-            img = colorize(d)
-            if "p" in click:
-                x, y = click["p"]
-                cv2.circle(img, (x, y), 4, (255, 255, 255), 1)
-                cv2.putText(img, f"{d[y, x]} mm", (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            cv2.imshow("cor", cv2.cvtColor(c, cv2.COLOR_RGB2BGR))
-            cv2.imshow("profundidade", img)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+        live()
     finally:
         stop()
 
