@@ -1,5 +1,7 @@
 # Plano: o S.B.R como plataforma (câmera externa, missões e IA)
 
+> Historical plan (Portuguese), kept as written. Current docs: [labs/06-kinect-navigation](../../labs/06-kinect-navigation/).
+
 Objetivo: usar o robô como base para outros projetos. **O robô só executa** (equilíbrio, velocidade, giro,
 segurar posição); **o cérebro fica fora**, num programa no PC que vê o robô por uma câmera externa com tags
 ArUco/AprilTag e manda comandos pelo WiFi. Sem SLAM e sem sensor novo no robô.

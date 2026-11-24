@@ -44,7 +44,7 @@ public:
     float moveAccel = 0.15f;  // m/s²: trajetória do move
     float moveSpeed = 0.2f;   // m/s: velocidade máx do move
 
-    // LQR (docs/plano-lqr.md, tools/lqr.py pesos "suave"): a = kt·θ + kw·ω + kx·(x − x_ref) + kv·(v − v_ref) + a_ref
+    // LQR (labs/03-lqr, lqr.py pesos "suave"): a = kt·θ + kw·ω + kx·(x − x_ref) + kv·(v − v_ref) + a_ref
     bool useLqr = false;      // `ctl lqr` / `ctl pid` (só fora do equilíbrio)
     float lqrKx = 27.67f;     // m/s² por m (à frente do lugar → acelera pra frente: inclina pra trás e volta)
     float lqrKv = 14.04f;     // m/s² por m/s

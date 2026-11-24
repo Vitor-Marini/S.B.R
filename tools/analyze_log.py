@@ -2,8 +2,8 @@
 """Analisa um log gravado pela ponte (logs/*.csv) e resume a sessão.
 
 Uso:
-  python3 tools/analisar_log.py                 # o log mais recente
-  python3 tools/analisar_log.py logs/ARQ.csv    # um log específico
+  python3 tools/analyze_log.py                 # o log mais recente
+  python3 tools/analyze_log.py logs/ARQ.csv    # um log específico
 
 Mostra: linha do tempo dos estados, qualidade do equilíbrio parado, cada `start` (engatou?),
 cada comando de andar (tempo pra arrancar e pra parar, distância), cada curva (girou o pedido?

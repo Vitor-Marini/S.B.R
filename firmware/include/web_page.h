@@ -1,5 +1,5 @@
 #pragma once
-// Página de controle servida pelo robô (docs/plano-web.md, fase 2 + DS4).
+// Página de controle servida pelo robô (labs/05-web-control).
 // Fala com o firmware pelo WebSocket /ws usando o mesmo protocolo de texto do terminal.
 static const char WEB_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">

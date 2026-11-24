@@ -1,5 +1,8 @@
 # Diário de desenvolvimento — S.B.R
 
+> **Language note:** this journal is the original dated log, kept in Portuguese. The [labs](../labs/) carry the
+> English write-ups of each topic.
+
 > Diagnóstico e histórico dos testes, em ordem. Começou como o plano de refatoração do firmware mk2
 > (2026-10-31). Caminhos antigos (`firmware/robot/S.B.R mk2/...`) hoje são `firmware/`, `tools/` e `docs/`.
 

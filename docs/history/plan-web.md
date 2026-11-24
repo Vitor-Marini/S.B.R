@@ -1,5 +1,7 @@
 # Plano: página web de controle servida pelo robô
 
+> Historical plan (Portuguese), kept as written. Current docs: [labs/05-web-control](../../labs/05-web-control/).
+
 Objetivo: usar o robô sem PC. O robô serve uma página (celular) com joystick, DS4, gráficos ao vivo,
 console e ajustes. As ferramentas do PC (ponte, PlotJuggler, logs, gamepad.py) continuam funcionando.
 

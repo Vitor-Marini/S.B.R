@@ -1,46 +1,62 @@
-# S.B.R — Self Balancing Robot
+# S.B.R — Self-Balancing Robot
 
-Robô autoequilibrante de duas rodas: ESP32-C3 + MPU6050 + 2× NEMA17 com DRV8825 (1/16), bateria Makita 12 V.
-Controle em cascata (equilíbrio, velocidade e curva) a 200 Hz, telemetria ao vivo no PlotJuggler e
-controle pelo PC (teclado ou DS4) via USB ou WiFi.
+A two-wheeled self-balancing robot built as a **study platform**: each technology it explores (control theory,
+sensor fusion, computer vision, simulation, learning) lives in its own **lab**, with the theory, the code and the
+numbers measured on the real robot.
 
-<img src="media/IMG_4836.JPEG" alt="S.B.R" width="400">
+ESP32-C3 + MPU6050 + 2× NEMA17 steppers (DRV8825, 1/16), Makita 12 V battery. Balances with **LQR** at 200 Hz,
+drives from a phone page or a DS4, and can be driven by programs through a small Python SDK.
 
-## Estrutura
+| mk1 | mk2 (current) |
+|---|---|
+| <img src="media/mk1/robot.jpg" alt="S.B.R mk1" width="300"> | <img src="media/mk2/robot-2.jpg" alt="S.B.R mk2" width="300"> |
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    IMU[MPU6050<br/>tilt + rate] --> F[IMU filter<br/>lab 02]
+    F --> C{controller<br/>LQR · lab 03<br/>PID cascade · lab 01}
+    C --> M[stepper motors<br/>wheel acceleration]
+    M -. physics .-> IMU
+    PH[phone page / DS4<br/>lab 05] -- drive, move, turn --> C
+    SDK[tools/sbr.py] -- WebSocket --> C
+    K[Kinect depth<br/>lab 06] --> SDK
+```
+
+## Labs
+
+| # | Lab | What it is about | Status |
+|---|-----|------------------|--------|
+| 01 | [PID and cascade control](labs/01-pid-cascade/) | PD balance + speed/position loops stacked on top | ✅ works, replaced by LQR |
+| 02 | [IMU filter](labs/02-imu-filter/) | complementary filter, gyro zero tracked while balancing | ✅ in use |
+| 03 | [LQR](labs/03-lqr/) | state feedback from a physical model; simulation before the robot | ✅ **default controller** |
+| 04 | [Odometry calibration](labs/04-odometry-calibration/) | gyro scale, wheel track, the 5-turn test | ✅ demo returns within 0.5 cm |
+| 05 | [Web control](labs/05-web-control/) | the robot serves a control page; WebSocket; Gamepad API | ✅ in use |
+| 06 | [Kinect navigation](labs/06-kinect-navigation/) | depth camera: floor plane, robot tracking, click-to-go | ⏸ works, paused |
+| 07 | MuJoCo + reinforcement learning | simulate the robot, train a policy, compare with LQR | 🔜 next |
+| 08 | Isaac Sim | the same robot on the RTX machine | 💭 later |
+
+## Repository
 
 ```
-firmware/   projeto PlatformIO (o que vai pra ESP32-C3): src/, include/, test/
-tools/      programas do PC: ponte serial/WiFi, teleop, gamepad, layout do PlotJuggler
-docs/       como-rodar, hardware, teoria de controle (controle.html) e diário de desenvolvimento
-hardware/   modelos 3D do chassi (Fusion 360)
-media/      fotos
+firmware/   PlatformIO project for the ESP32-C3 (src/, include/, test/)
+tools/      everyday PC tools: SDK (sbr.py), serial/WiFi bridge, gamepad, teleop, log analysis
+labs/       one folder per technology: README (theory → code → results → lessons) + its scripts
+docs/       getting started, hardware, journal (dated log of every test), history (past plans)
+hardware/   3D models of the chassis (Fusion 360)
+media/      photos (mk1, mk2)
 ```
 
-## Começando
+## Quick start
 
 ```bash
-# gravar o firmware
-~/.platformio/penv/bin/pio run -d firmware -t upload
-
-# PlotJuggler + ponte (terminal do robô), via WiFi; `tools/sbr.sh usb` pelo cabo
-tools/sbr.sh
-
-# controlar pelo DS4 conectado no PC (ou: python3 tools/teleop.py, teclado)
-python3 tools/gamepad.py
+~/.platformio/penv/bin/pio run -d firmware -t upload     # flash (robot on its stand)
+# phone: open http://sbr.local
+tools/sbr.sh                                              # or PC: PlotJuggler + terminal over WiFi
 ```
 
-Passo a passo completo em [docs/como-rodar.md](docs/como-rodar.md).
+Full guide: [docs/getting-started.md](docs/getting-started.md) · Hardware: [docs/hardware.md](docs/hardware.md) ·
+Everything that was tried, in order: [docs/journal.md](docs/journal.md).
 
-## Documentação
-
-- [docs/como-rodar.md](docs/como-rodar.md) — operação do dia a dia, comandos e parâmetros
-- [docs/hardware.md](docs/hardware.md) — pinagem, microstepping, convenções e o que falta melhorar
-- [docs/controle.html](docs/controle.html) — teoria de controle explicada pelo robô, com simulador (abrir no navegador)
-- [docs/diario.md](docs/diario.md) — diagnóstico e histórico dos testes
-
-## Estado
-
-Equilibra parado e gira sob comando. Andar pra frente/trás depende de um chassi rígido
-(ver [docs/hardware.md](docs/hardware.md)). O firmware antigo está na tag git `mk1`.
-
-<img src="media/IMG_4737.JPEG" alt="S.B.R" width="400">
+The mk1 firmware is at the git tag `mk1`.

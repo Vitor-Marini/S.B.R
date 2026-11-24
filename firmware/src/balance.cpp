@@ -29,7 +29,7 @@ void BalanceController::compute() {
     float accel = kp * _angleError + kd * pitchRate + _extra;
     // LQR: teto no que o motor entrega de verdade. Acima disso o stepper perde passo, a roda real fica pra trás da
     // comandada (e da odometria) e o controle perde a referência: os empurrões pediam 11 m/s² e caía. O LQR com
-    // teto honesto aguenta empurrões maiores (tools/lqr.py) que o PD.
+    // teto honesto aguenta empurrões maiores (labs/03-lqr/lqr.py) que o PD.
     if (cfg.useLqr) accel = constrain(accel, -LQR_ACCEL_MAX, LQR_ACCEL_MAX);
 
     // roda = equilíbrio + velocidade pedida (feedforward). Andar não depende de inclinar:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SDK do S.B.R: controla o robô direto pelo WiFi (WebSocket /ws do robô), sem a ponte serial.
 
-Uso como biblioteca (docs/plano-plataforma.md, fase 1):
+Uso como biblioteca (base de labs/06-kinect-navigation e docs/history/plan-platform.md):
 
     from sbr import Robot
     r = Robot("sbr.local")          # ou o IP

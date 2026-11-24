@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
-"""goto pelo Kinect (fase 3, docs/plano-plataforma.md): clique no mapa e o robô vai até lá.
+"""goto pelo Kinect (labs/06-kinect-navigation): clique no mapa e o robô vai até lá.
 
-Posição: Kinect (tools/kinect.py, absoluta, em metros no chão). Rumo: gyro do robô (`yaw` do stream), alinhado
+Posição: Kinect (kinect.py, absoluta, em metros no chão). Rumo: gyro do robô (`yaw` do stream), alinhado
 ao mapa pelo próprio movimento: andando reto, a direção em que o Kinect vê o robô se mover É o rumo dele no mapa.
 
-    python3 tools/navegar.py [host]   (robô equilibrando; Kinect ligado e sem outro programa usando)
+    python3 labs/06-kinect-navigation/navigate.py [host]   (robô equilibrando; Kinect ligado e sem outro programa usando)
       clique no robô (janela profundidade) → escolhe quem seguir
       clique no mapa                       → vai até lá (se o rumo ainda não é conhecido, anda 10 cm reto antes)
       clique e arraste no mapa             → vai até lá e termina virado pra direção do arraste
       mapa: cinza = o que a câmera vê, vermelho = obstáculo, linha amarela = trajeto planejado (vermelha se bate)
       x → cancela (para e segura a posição)   c → limpa o trajeto   q → sai
-    python3 tools/navegar.py selftest
+    python3 labs/06-kinect-navigation/navigate.py selftest
 """
 import math
 import sys
 import time
 
+import os
+
 import numpy as np
 
-import kinect
-import sbr
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools"))
+import kinect  # noqa: E402  (mesma pasta)
+import sbr  # noqa: E402  (tools/sbr.py: SDK do robô)
 
 V_MAX = 0.15          # m/s
 W_MAX = 45.0          # °/s

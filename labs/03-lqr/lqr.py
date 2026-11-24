@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LQR do S.B.R: modelo, ganhos e simulação comparando com a cascata atual (docs/plano-lqr.md).
+"""LQR do S.B.R: modelo, ganhos e simulação comparando com a cascata atual (labs/03-lqr).
 
 Modelo (stepper: a roda faz a aceleração mandada, então a entrada é a aceleração `a` da roda):
     θ̈ = (g·sen θ − a·cos θ) / L        pêndulo sobre o eixo; L = I/(m·d) medido ≈ 0,09 m (teste do pêndulo)
@@ -8,8 +8,8 @@ Estados s = [x, v, θ, ω] (m, m/s, rad, rad/s), θ+ = caindo pra frente (mesma 
 LQR: a = −K·s, ou seja, UMA soma de 4 termos — o PD de equilíbrio de hoje + posição + velocidade juntos,
 em vez da posição/velocidade mexerem no setpoint (cascata, que espera a malha de dentro).
 
-Uso: python3 tools/lqr.py            → ganhos + simulação (cascata x LQR) de parado, empurrão e move 50 cm
-     python3 tools/lqr.py --plot     → também salva lqr.png (precisa de matplotlib)
+Uso: python3 labs/03-lqr/lqr.py            → ganhos + simulação (cascata x LQR) de parado, empurrão e move 50 cm
+     python3 labs/03-lqr/lqr.py --plot     → também salva lqr.png (precisa de matplotlib)
 """
 import sys
 

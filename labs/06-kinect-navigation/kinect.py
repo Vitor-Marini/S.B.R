@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Kinect v1 (Xbox 360) pelo libfreenect_sync via ctypes: imagem colorida + profundidade em mm.
 
-Fase 2 da plataforma (docs/plano-plataforma.md), passo 1: ver o que o Kinect vê.
+labs/06-kinect-navigation: ver o que o Kinect vê, achar o chão e o robô.
 Precisa do libfreenect0.5 (já instalado: apt libfreenect-dev) e do Kinect na fonte + USB.
 
-    python3 tools/kinect.py           → ao vivo: profundidade com o robô marcado + mapa visto de cima com o trajeto;
+    python3 labs/06-kinect-navigation/kinect.py           → ao vivo: profundidade com o robô marcado + mapa visto de cima com o trajeto;
                                         clique na profundidade = distância no ponto; c limpa o trajeto; q sai
-    python3 tools/kinect.py snap DIR  → salva DIR/cor.png e DIR/prof.png (pra conferir sem tela)
-    python3 tools/kinect.py tilt GRAUS → motor de inclinação (−27 a +27; negativo = olhar pra baixo)
-    python3 tools/kinect.py chao DIR   → acha o plano do chão e o robô (bolha acima do chão); salva DIR/chao.png
-    python3 tools/kinect.py selftest
+    python3 labs/06-kinect-navigation/kinect.py snap DIR  → salva DIR/cor.png e DIR/prof.png (pra conferir sem tela)
+    python3 labs/06-kinect-navigation/kinect.py tilt GRAUS → motor de inclinação (−27 a +27; negativo = olhar pra baixo)
+    python3 labs/06-kinect-navigation/kinect.py chao DIR   → acha o plano do chão e o robô (bolha acima do chão); salva DIR/chao.png
+    python3 labs/06-kinect-navigation/kinect.py selftest
 """
 import ctypes
 import os

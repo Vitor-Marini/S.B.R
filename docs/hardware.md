@@ -1,107 +1,94 @@
-# Hardware do S.B.R
+# S.B.R hardware
 
-Referência do hardware **como está montado hoje** e do que falta melhorar.
-O histórico de como cada coisa foi descoberta está em [diario.md](diario.md).
+Reference for the hardware **as it is built today** and what's left to improve.
+How each thing was found out is in [journal.md](journal.md).
 
-## Componentes
+## Parts
 
-| Componente | Detalhe |
-|------------|---------|
-| MCU | ESP32-C3 Supermini (RISC-V, 160 MHz, **um núcleo**, WiFi + **só Bluetooth LE**) |
-| IMU | MPU6050 (I2C 400 kHz, DLPF 44 Hz, ±8 g, ±500 °/s) |
-| Motores | 2× NEMA17, 200 passos/volta |
-| Drivers | 2× DRV8825, **microstepping 1/16** (3200 passos/volta) |
-| Rodas | PLA impresso, diâmetro 74 mm |
-| Bateria | Makita BL1016 (10,8–12 V); a ESP é alimentada por um DC-DC a partir dela |
-| Chassi | rígido desde 2026-11-21 (viga entre as placas laterais); peças em `hardware/3d-models/` |
+| Part | Detail |
+|------|--------|
+| MCU | ESP32-C3 Supermini (RISC-V, 160 MHz, **single core, no FPU**, WiFi + **Bluetooth LE only**) |
+| IMU | MPU6050 (I²C 400 kHz, DLPF 44 Hz, ±8 g, ±500 °/s) |
+| Motors | 2× NEMA17, 200 steps/rev |
+| Drivers | 2× DRV8825, **1/16 microstepping** (3200 steps/rev) |
+| Wheels | printed PLA, 74 mm diameter |
+| Battery | Makita BL1016 (10.8–12 V); the ESP is powered from it through a DC-DC |
+| Chassis | rigid since 2026-11-21 (beam between the side plates); parts in `hardware/3d-models/` |
 
-## Pinagem
+## Pinout
 
-| Sinal | ESP32-C3 | Observação |
-|-------|----------|------------|
+| Signal | ESP32-C3 | Note |
+|--------|----------|------|
 | SDA (MPU) | GPIO 8 | |
 | SCL (MPU) | GPIO 9 | |
-| STEP motor "L" | GPIO 0 | **"L" do firmware é a roda ESQUERDA** do robô (olhando pra frente; medido 2026-11-21) |
+| STEP motor "L" | GPIO 0 | **firmware "L" is the robot's LEFT wheel** (looking forward; measured 2026-11-21) |
 | DIR motor "L" | GPIO 1 | |
 | DIR motor "R" | GPIO 2 | |
 | STEP motor "R" | GPIO 3 | |
-| M2 dos dois drivers | 3,3 V (ou 5 V) | 1/16; M0 e M1 soltos (pull-down interno) |
-| ENABLE dos drivers | não ligado | drivers sempre energizados (chiam e esquentam parados) |
+| M2 on both drivers | 3.3 V (or 5 V) | 1/16; M0 and M1 floating (internal pull-down) |
+| Driver ENABLE | not wired | drivers always powered (whine and warm up when idle) |
 
-Microstepping do DRV8825:
+DRV8825 microstepping:
 
-| M2 | M1 | M0 | Modo | `tune spr` |
+| M2 | M1 | M0 | Mode | `tune spr` |
 |----|----|----|------|------------|
 | 0 | 0 | 0 | full step | 200 |
-| **1** | **0** | **0** | **1/16 (atual)** | **3200** |
+| **1** | **0** | **0** | **1/16 (current)** | **3200** |
 | 1 | 0 | 1 | 1/32 | 6400 |
 
-## Convenções verificadas no robô
+## Conventions checked on the robot
 
-- **Frente = lado da chave liga/desliga** (−Y no CAD). Pitch positivo = inclinado pra lá, e comando
-  positivo nas rodas anda pra lá. Conferir com essa referência física, não com "frente" de memória.
-- Eixo de queda: acelerômetro X/Z + **gyro Y** (MPU deitado, chip pra cima).
-- **Gyro Z positivo = girar pra esquerda** (anti-horário visto de cima).
-- Desde a remontagem de 2026-11-21 os dois motores estão invertidos: `tune lrev 1`, `tune rrev 1`
-  (`motor both +N` anda pra frente). Se remontar e o robô "acelerar e cair", confira esse sinal primeiro.
-- **"L" do firmware (GPIO0) = roda esquerda** olhando pra frente. Medido girando no lugar: `motors 1600 -1600`
-  → giro horário (yaw cai). Se a curva "girar sem parar", esse mapeamento mudou: inverta o sinal em `balance.cpp`.
-- Com o MPU nessa orientação, a configuração `regs` esperada é `75=68 6B=01 19=00 1A=03 1B=08 1C=10`.
+- **Front = the power switch side** (−Y in CAD). Positive pitch = leaning that way, and a positive wheel
+  command drives that way. Check against this physical reference, not "front" from memory.
+- Fall axis: accelerometer X/Z + **gyro Y** (MPU lying flat, chip up).
+- **Positive gyro Z = turning left** (counter-clockwise seen from above).
+- Since the 2026-11-21 rebuild both motors are reversed: `tune lrev 1`, `tune rrev 1` (`motor both +N` drives
+  forward). After a rebuild, if the robot "accelerates and falls", check this sign first.
+- **Firmware "L" (GPIO0) = left wheel** looking forward. Measured turning in place: `motors 1600 -1600` →
+  clockwise (yaw decreases). If turning "never stops", this mapping changed: flip the sign in `balance.cpp`.
+- With the MPU in this orientation, `regs` should read `75=68 6B=01 19=00 1A=03 1B=08 1C=10`.
 
-## O que falta melhorar (por prioridade)
+## Physical parameters
 
-1. ✅ **Chassi rígido** (2026-11-21): viga entre as placas laterais; antes ele flexionava e o robô não andava.
-2. ✅ **MPU baixo e rígido** (2026-11-21): na prateleira logo acima dos motores (~37 mm acima do eixo), mesma
-   orientação de antes (eixos conferidos inclinando). Setpoint remedido: −0,9°. Ainda vale afastar dos drivers
-   (calor → deriva do gyro): faça `cal` depois de aquecer.
-3. **Alimentação.** Já houve reset do MPU e reboots da ESP por mau contato; capacitor (100–470 µF)
-   perto da ESP/MPU e conectores firmes. Bateria fraca derruba os motores.
-4. **Monitor de bateria.** Divisor (ex.: 100 kΩ + 33 kΩ → ~3,1 V a 12,6 V) num pino ADC livre.
-5. **ENABLE num GPIO**, pra desligar os motores em IDLE/FAULT (sem chiado e sem esquentar).
-6. **Vref** dos drivers: ~0,6–0,7 V pra NEMA17 de ~1,2–1,5 A (nunca medido).
-7. ✅ **Bateria no topo** (2026-11-21). Mesmo assim o centro de massa do corpo fica só ~37 mm acima do eixo.
+| Quantity | Value | Source |
+|---|---|---|
+| Total / body mass (without wheels) | 1.06 kg / 1.02 kg | mk2 CAD, scale-calibrated |
+| Body center of mass above the axle (d) | 37 mm (±15 %) | CAD |
+| Body inertia about the axle (I) | 3.93e-3 kg·m² | CAD |
+| **Effective pendulum length L = I/(m·d)** | **0.09 m** (CAD: 0.10) | **pendulum test** |
+| Wheel radius | 37 mm (firmware: 74 mm diameter, measured) | measured |
+| Wheel track, center to center / effective in turns | 150 mm / **160 mm** | measured / 5-turn test |
+| Gyro Z scale | 1.002 | 5-turn test |
+| MPU chip above the axle | 37 mm | CAD |
 
-## Parâmetros físicos (modelo 3D do mk2, calibrado com a balança)
+- **Pendulum test (2026-11-22):** robot upside down swinging about the wheel axle, gyro recorded from the stream.
+  Period at 15–30° amplitude: **T ≈ 0.61 s** → `L = g·(T/2π)² ≈ 0.09 m`. Above ~50° the period grows (non-linear)
+  and the gyro **saturates at ±500 °/s**.
+- **Turn calibration (2026-11-23):** `turn ±1800` against a tape line. Gyro off by ~3° in 5 turns both ways;
+  wheels over-counted 4.9 % / 8.7 % (uneven tire slip in turns) → effective track 0.160 m.
+  Details in [labs/04-odometry-calibration](../labs/04-odometry-calibration/).
 
-| Grandeza | Valor |
-|---|---|
-| Massa total / do corpo (sem rodas) | 1,06 kg / 1,02 kg |
-| Centro de massa do corpo acima do eixo (d) | 37 mm (±15 %) |
-| Inércia do corpo em torno do eixo (I) | 3,93e-3 kg·m² |
-| **Comprimento efetivo do pêndulo L = I/(m·d)** | **≈ 0,10 m** (é o L de `docs/controle.html`) |
-| Raio da roda / bitola (centro a centro) | 37,5 mm / 150 mm (efetiva no giro: ~160 mm, ver abaixo) |
-| Chip do MPU acima do eixo | 37 mm |
+## Where to mount the IMU
 
-Fonte: modelo Fusion "S.B.R mk2" v4, massas calibradas com o peso real (precisão: massa ±5 %, CG e inércias ±15 %).
+- The **gyro** reads the same anywhere on a **rigid** body: only mounting stiffness matters.
+- The **accelerometer** reads gravity + the acceleration of its own point. In the linear pendulum
+  (L = effective length, a = wheel acceleration, h = sensor height above the axle):
 
-**Giro calibrado (2026-11-23), `turn ±1800` com fita no chão:** o gyro errou ~3° em 5 voltas nos dois sentidos
-(escala `gzs` 1,002). As rodas contaram a mais: esquerda 1888° (com rejunte), direita 1957° equivalentes a 150 mm
-(centro do piso) → bitola efetiva 157–163 mm, usada **0,160** (`track`). A diferença entre sentidos e o deslocamento
-lateral nos dois testes indicam roda escorregando de forma desigual (pneu ou roda folgada no eixo?): a odometria de
-giro pelas rodas erra ±2–4 % neste piso; o `turn` usa o gyro.
+  `reading_x ≈ a·(1 − h/L) + g·θ·(1 + h/L)`
 
-**L medido (2026-11-22), teste do pêndulo:** robô de cabeça pra baixo, balançando em torno do eixo das rodas,
-gyro gravado pelo stream. Período com amplitude de 15–30°: **T ≈ 0,61 s** (0,58–0,63) → `L = g·(T/2π)² ≈ 0,09 m`
-(0,084–0,099), ~8 % abaixo do CAD. Acima de ~50° o período cresce (pêndulo não linear) e o gyro **satura em
-±500 °/s** (escala atual do MPU).
-O firmware usa roda de 74 mm (medida); o CAD diz 75 mm (1 % de diferença na velocidade).
+  - **At the axle (h = 0):** wheel acceleration shows up fully, but it is **known** (stepper: commanded = real),
+    so the firmware could subtract it. Recommended, together with stiffness.
+  - **At the center of percussion (h ≈ L):** wheel acceleration cancels, but L is uncertain and the chassis flexes
+    up there. Not worth it.
+- The complementary filter (α = 0.995) trusts the gyro below ~1 s, so the accelerometer only matters for slow effects.
 
-## Onde montar o IMU
+## What's left to improve (by priority)
 
-- O **gyro** lê o mesmo em qualquer ponto de um corpo **rígido**: só a rigidez da montagem importa.
-- O **acelerômetro** mede gravidade + a aceleração do ponto onde está. Num modelo linear do pêndulo
-  (L = comprimento efetivo, a = aceleração da roda, h = altura do sensor acima do eixo):
-
-  `leitura_x ≈ a·(1 − h/L) + g·θ·(1 + h/L)`
-
-  - **No eixo (h = 0):** a aceleração da roda aparece inteira, mas ela é **conhecida** (stepper: comandada =
-    real), então o firmware pode subtraí-la. Montagem recomendada, junto com rigidez.
-  - **No "centro de percussão" (h ≈ L):** a aceleração da roda se cancela, mas o ângulo aparece em dobro,
-    L é desconhecido e muda com a posição das baterias, e lá em cima o chassi flexiona. Na prática, não compensa.
-- O filtro complementar (α = 0,995) confia no gyro abaixo de ~1 s, então o acelerômetro só pesa nos efeitos lentos
-  (andar acelerando, deriva).
-
-## Limitação importante
-
-O **DS4 não conecta direto na ESP32-C3**: ele usa Bluetooth Clássico e a C3 só tem Bluetooth LE.
-O controle é feito pelo PC (`tools/gamepad.py`), que manda os comandos ao robô pelo WiFi.
+1. ✅ **Rigid chassis** (2026-11-21).
+2. ✅ **Low, rigid MPU** (2026-11-21), ~37 mm above the axle. Still worth moving away from the drivers (heat → gyro drift).
+3. **Power.** There were MPU resets and ESP reboots from bad contacts; a 100–470 µF cap near the ESP/MPU and firm connectors.
+4. **Battery monitor.** Divider (e.g. 100 kΩ + 33 kΩ → ~3.1 V at 12.6 V) on a free ADC pin.
+5. **ENABLE on a GPIO**, to turn the motors off in IDLE/FAULT (no whine, no heat).
+6. **Driver Vref**: ~0.6–0.7 V for a ~1.2–1.5 A NEMA17 (never measured). More current = more torque, fewer missed steps.
+7. **Tires with more grip**: uneven slip shows up in turns and on tile grout.
+8. ✅ **Battery on top** (2026-11-21).
