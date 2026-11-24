@@ -1,0 +1,40 @@
+{
+  "_doc": "Physical sheet of S.B.R mk2: the single source for every simulator (MuJoCo now, Isaac later). Units: SI. See docs/hardware.md for where each number comes from.",
+  "body": {
+    "mass": 1.02,
+    "com_height": 0.037,
+    "pendulum_length_L": 0.09,
+    "_L": "measured by the pendulum test (T = 0.61 s); sets the pitch inertia: I_axle = L * m * d",
+    "size": [
+      0.09,
+      0.12,
+      0.17
+    ],
+    "_size": "visual box only (depth x, width y, height z); does not affect mass or inertia"
+  },
+  "wheel": {
+    "radius": 0.037,
+    "width": 0.02,
+    "mass": 0.02,
+    "track": 0.15,
+    "_track": "geometric, center to center; turns measured 0.160 effective (tire slip)"
+  },
+  "imu_height": 0.037,
+  "motor": {
+    "max_speed": 0.8,
+    "_max_speed": "m/s at the wheel (firmware vmax)",
+    "torque_limit": 0.3,
+    "_torque_limit": "N*m per wheel; GUESS (driver Vref never measured). Above it the wheel can't follow: the sim's version of missed steps",
+    "servo_gain": 0.2,
+    "_servo_gain": "N*m per rad/s: how stiffly the wheel follows the commanded speed. 5 made the servo chatter against the torque limit and shake the robot down; 0.2 tracks within ~0.01 cm/s",
+    "rotor_inertia": 5e-05,
+    "_rotor_inertia": "kg*m^2 added to each wheel joint (MuJoCo armature): NEMA17 rotor ~5.4e-6 + wheel hub; raised to 5e-5 so the stiff stepper servo stays numerically clean at a 1 ms step"
+  },
+  "floor_friction": 0.8,
+  "control": {
+    "dt": 0.005,
+    "sensor_delay_ticks": 1
+  },
+  "disturbance_torque": 0.008,
+  "_disturbance_torque": "N*m, random pitch torque on the body every 5 ms (motor vibration, backlash, floor). Calibrated so BOTH controllers wobble like the real robot standing still (PID ±3.5 cm, LQR ±0.5 cm)"
+}

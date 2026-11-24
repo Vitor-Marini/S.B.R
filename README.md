@@ -34,7 +34,7 @@ flowchart LR
 | 04 | [Odometry calibration](labs/04-odometry-calibration/) | gyro scale, wheel track, the 5-turn test | ✅ demo returns within 0.5 cm |
 | 05 | [Web control](labs/05-web-control/) | the robot serves a control page; WebSocket; Gamepad API | ✅ in use |
 | 06 | [Kinect navigation](labs/06-kinect-navigation/) | depth camera: floor plane, robot tracking, click-to-go | ⏸ works, paused |
-| 07 | MuJoCo + reinforcement learning | simulate the robot, train a policy, compare with LQR | 🔜 next |
+| 07 | [MuJoCo + reinforcement learning](labs/07-mujoco-rl/) | simulate the robot, train a policy, compare with LQR | 🟡 simulator validated |
 | 08 | Isaac Sim | the same robot on the RTX machine | 💭 later |
 
 ## Repository
@@ -43,6 +43,7 @@ flowchart LR
 firmware/   PlatformIO project for the ESP32-C3 (src/, include/, test/)
 tools/      everyday PC tools: SDK (sbr.py), serial/WiFi bridge, gamepad, teleop, log analysis
 labs/       one folder per technology: README (theory → code → results → lessons) + its scripts
+model/      the robot's physical sheet (params.json) + generators for simulators (MuJoCo now, Isaac later)
 docs/       getting started, hardware, journal (dated log of every test), history (past plans)
 hardware/   3D models of the chassis (Fusion 360)
 media/      photos (mk1, mk2)

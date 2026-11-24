@@ -9,3 +9,5 @@ logs/
 # Python
 __pycache__/
 *.pyc
+.venv/
+model/sbr.xml
