@@ -45,7 +45,7 @@ tools/      everyday PC tools: SDK (sbr.py), serial/WiFi bridge, gamepad, teleop
 labs/       one folder per technology: README (theory → code → results → lessons) + its scripts
 model/      the robot's physical sheet (params.json) + generators for simulators (MuJoCo now, Isaac later)
 docs/       getting started, hardware, journal (dated log of every test), history (past plans)
-hardware/   3D models of the chassis (Fusion 360)
+hardware/   3D models of the chassis (Fusion 360) + printables/ (tags and calibration board, `tools/make_tags.py`)
 media/      photos (mk1, mk2)
 ```
 
