@@ -115,7 +115,7 @@ void IMUManager::_sample() {
     _accAngle = degrees(atan2f(_ax - cfg.filter.accBiasX, _az - cfg.filter.accBiasZ));
     // placa/chip nunca perfeitamente alinhados: girar no lugar (gz) vaza no gyro de pitch e vira inclinação falsa
     _pitchRate = -degrees(_gy + cfg.filter.gyroCross * _gz);
-    _yawRate = degrees(_gz);
+    _yawRate = degrees(_gz) * cfg.filter.gyroZScale;
 }
 
 // Parado em IDLE, o zero do gyro segue o bias (temperatura, calibração ruim). Quem diz "parado" é o

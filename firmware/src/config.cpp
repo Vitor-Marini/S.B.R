@@ -55,6 +55,8 @@ bool ConfigManager::load() {
     if (!doc["acc_bias_z"].isNull()) filter.accBiasZ = doc["acc_bias_z"].as<float>();
     if (!doc["comp_alpha"].isNull()) filter.complementaryAlpha = doc["comp_alpha"].as<float>();
     if (!doc["gyro_cross"].isNull()) filter.gyroCross = doc["gyro_cross"].as<float>();
+    if (!doc["gyro_z_scale"].isNull()) filter.gyroZScale = doc["gyro_z_scale"].as<float>();
+    if (!doc["track_m"].isNull()) motor.trackM = doc["track_m"].as<float>();
 
     if (!doc["max_velocity"].isNull()) maxVelocity = doc["max_velocity"].as<float>();
     if (!doc["max_turn_rate"].isNull()) maxTurnRate = doc["max_turn_rate"].as<float>();
@@ -106,6 +108,8 @@ bool ConfigManager::save() {
     doc["acc_bias_z"] = filter.accBiasZ;
     doc["comp_alpha"] = filter.complementaryAlpha;
     doc["gyro_cross"] = filter.gyroCross;
+    doc["gyro_z_scale"] = filter.gyroZScale;
+    doc["track_m"] = motor.trackM;
 
     doc["max_velocity"] = maxVelocity;
     doc["max_turn_rate"] = maxTurnRate;
@@ -153,6 +157,7 @@ void ConfigManager::print() {
     term.print ("--- Filter ---\n");
     term.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);
     term.printf("  Comp alpha: %.3f  Gyro cross (gxz): %.4f\n", filter.complementaryAlpha, filter.gyroCross);
+    term.printf("  Escala gyro Z (gzs): %.4f  Bitola (track): %.4f m\n", filter.gyroZScale, motor.trackM);
     term.print ("--- Telemetry ---\n");
     term.printf("  State:  %d\n", robotState);
     term.printf("  Pitch:  %.2f\n", pitchAngle);

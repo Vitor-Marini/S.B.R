@@ -62,8 +62,9 @@ void VelocityController::update() {
     if (_turnActive) {
         _turnDone += cfg.yawRate * dt;
         float left = _turnGoal - _turnDone;
-        if (fabsf(left) < 1.0f || millis() - _turnStartMs > TURN_TIMEOUT_MS) {
-            term.printf(fabsf(left) < 1.0f ? "giro ok: %.1f°\n" : "giro desistiu (travado/no suporte?): %.1f°\n", _turnDone);
+        uint32_t timeout = TURN_TIMEOUT_MS + (uint32_t)(fabsf(_turnGoal) / TURN_CMD_RATE * 1500.0f);
+        if (fabsf(left) < TURN_TOL_DEG || millis() - _turnStartMs > timeout) {
+            term.printf(fabsf(left) < TURN_TOL_DEG ? "giro ok: %.1f°\n" : "giro desistiu (travado/no suporte?): %.1f°\n", _turnDone);
             _turnActive = false;
             _targetTurnRate = 0.0f;
         } else {
@@ -95,7 +96,7 @@ void VelocityController::update() {
     else _turnIntegral -= _turnIntegral * dt / I_DECAY_S;
     _turnIntegral = constrain(_turnIntegral, -30.0f, 30.0f);
     // feedforward: diferença por roda que a geometria pede (stepper não patina); o PI só corrige o resto
-    float turnFF = _rampedTurn * DEG_TO_RAD * TRACK_M / 2.0f;
+    float turnFF = _rampedTurn * DEG_TO_RAD * cfg.motor.trackM / 2.0f;
     _turnOffset = turnFF + cfg.yawPid.kp * turnError + cfg.yawPid.ki * _turnIntegral;
     _turnOffset = constrain(_turnOffset, -0.3f, 0.3f);
 }

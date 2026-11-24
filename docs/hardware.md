@@ -69,10 +69,16 @@ Microstepping do DRV8825:
 | Centro de massa do corpo acima do eixo (d) | 37 mm (±15 %) |
 | Inércia do corpo em torno do eixo (I) | 3,93e-3 kg·m² |
 | **Comprimento efetivo do pêndulo L = I/(m·d)** | **≈ 0,10 m** (é o L de `docs/controle.html`) |
-| Raio da roda / bitola (centro a centro) | 37,5 mm / 150 mm |
+| Raio da roda / bitola (centro a centro) | 37,5 mm / 150 mm (efetiva no giro: ~160 mm, ver abaixo) |
 | Chip do MPU acima do eixo | 37 mm |
 
 Fonte: modelo Fusion "S.B.R mk2" v4, massas calibradas com o peso real (precisão: massa ±5 %, CG e inércias ±15 %).
+
+**Giro calibrado (2026-11-23), `turn ±1800` com fita no chão:** o gyro errou ~3° em 5 voltas nos dois sentidos
+(escala `gzs` 1,002). As rodas contaram a mais: esquerda 1888° (com rejunte), direita 1957° equivalentes a 150 mm
+(centro do piso) → bitola efetiva 157–163 mm, usada **0,160** (`track`). A diferença entre sentidos e o deslocamento
+lateral nos dois testes indicam roda escorregando de forma desigual (pneu ou roda folgada no eixo?): a odometria de
+giro pelas rodas erra ±2–4 % neste piso; o `turn` usa o gyro.
 
 **L medido (2026-11-22), teste do pêndulo:** robô de cabeça pra baixo, balançando em torno do eixo das rodas,
 gyro gravado pelo stream. Período com amplitude de 15–30°: **T ≈ 0,61 s** (0,58–0,63) → `L = g·(T/2π)² ≈ 0,09 m`

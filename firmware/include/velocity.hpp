@@ -58,10 +58,10 @@ private:
     bool _turnActive = false;
     float _turnGoal = 0.0f, _turnDone = 0.0f;  // ° pedidos / ° girados (gyro Z integrado)
     uint32_t _turnStartMs = 0;
-    static constexpr float TRACK_M = 0.150f;          // bitola centro a centro (docs/hardware.md)
     static constexpr float TURN_CMD_RATE = 45.0f;     // °/s máx do turn
     static constexpr float TURN_KP = 4.0f;            // 1/s: perto do alvo, taxa = 4 × graus que faltam
-    static constexpr uint32_t TURN_TIMEOUT_MS = 10000; // no suporte o robô não gira: desiste
+    static constexpr uint32_t TURN_TIMEOUT_MS = 5000;  // + o tempo do giro a 45 °/s ×1,5; no suporte não gira: desiste
+    static constexpr float TURN_TOL_DEG = 0.3f;        // 1° parava sempre ~1° curto (179° num 180)
     static constexpr float TRIM_MAX_SPEED = 0.3f;    // m/s (deriva de até ~1,2° de erro de setpoint)
     static constexpr float TRIM_MAX_RATE = 20.0f;    // °/s
     static constexpr float TRIM_MAX_ERR_DEG = 3.0f;  // ° de pitch longe do setpoint

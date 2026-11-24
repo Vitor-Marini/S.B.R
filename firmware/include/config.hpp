@@ -15,6 +15,7 @@ struct MotorParams {
     float maxAccelStepsS2 = 400000.0f;    // só trava de segurança; quem acelera é o controle
     bool leftReversed = true;    // montagem de 2026-11-21: os dois motores invertidos
     bool rightReversed = true;
+    float trackM = 0.150f;  // bitola (m): giro = diferença entre rodas / bitola; calibrar com `turn 1800`
 };
 
 // Loop de controle fixo: IMU, PID e supervisor rodam juntos nesta taxa.
@@ -26,6 +27,7 @@ struct FilterParams {
     float accBiasX = 0.0f;             // m/s², medido deitando o robô de frente/costas
     float accBiasZ = 0.0f;
     float gyroCross = 0.013f;          // parte do giro (gz) que vaza no gyro de pitch; medido girando
+    float gyroZScale = 1.0f;           // escala do gyro Z (fábrica: ±3 %); calibrar com `turn 1800` e uma fita
 };
 
 class ConfigManager {
