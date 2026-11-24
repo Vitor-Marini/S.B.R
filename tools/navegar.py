@@ -29,6 +29,8 @@ TURN_ONLY = 35.0      # °: acima disso de erro de rumo, só gira (não anda tor
 ARRIVE = 0.04         # m: chegou
 ALIGN_DIST = 0.10     # m: anda reto isso pra descobrir o rumo no mapa
 FACE_TOL = 3.0        # °: virou pra direção pedida
+MAX_RANGE = 2.5       # m à frente da câmera: além disso o rastreio fica fraco (medir e ajustar)
+MARGIN = 0.15         # m: alvo longe da borda do que a câmera vê (o robô inteiro tem que caber na imagem)
 
 
 def wrap(a):
@@ -168,6 +170,12 @@ def main(host):
     o, ex, ey = kinect.floor_frame(n, c)
     print(f"chão: câmera a {c:.2f} m, {np.degrees(np.arccos(abs(n[1]))):.0f}° pra baixo. Clique no robô na profundidade.")
     fov = np.array([kinect.to_map(*p) for p in camera_footprint(n, c, o, ex, ey)], np.int32)
+
+    def trackable(pt, margin=MARGIN):
+        """Dentro do que a câmera vê, longe da borda, e não longe demais."""
+        u, v = kinect.to_map(*pt)
+        return pt[0] <= MAX_RANGE and cv2.pointPolygonTest(fov, (float(u), float(v)), True) >= margin * kinect.MAP_PX
+    msg, msg_t = "", 0.0
     obs_img, frame_i = None, 0
     clicks, drag = {}, {}
 
@@ -204,10 +212,13 @@ def main(host):
                 trail.append(None)
             if "alvo" in clicks:
                 (mu, mv), (eu, ev_) = clicks.pop("alvo")
-                if last:
+                g = (kinect.MAP_X[1] - mv / kinect.MAP_PX, kinect.MAP_Y[1] - mu / kinect.MAP_PX)
+                if last and not trackable(g):
+                    msg, msg_t = "fora da area rastreavel", time.time()
+                elif last:
                     # arrastou mais de 15 px: direção do arraste (no mapa, pra cima = +x, pra esquerda = +y)
                     face = math.degrees(math.atan2(mu - eu, mv - ev_)) if math.hypot(eu - mu, ev_ - mv) > 15 else None
-                    nav.go((kinect.MAP_X[1] - mv / kinect.MAP_PX, kinect.MAP_Y[1] - mu / kinect.MAP_PX), face)
+                    nav.go(g, face)
             frame_i += 1
             if frame_i % 6 == 1:     # obstáculos ~5 vezes por segundo (é a parte cara)
                 obs = obstacles(d, n, c, o, ex, ey, r[4] if r else None)
@@ -218,12 +229,19 @@ def main(host):
                     ok = (uv[:, 0] >= 0) & (uv[:, 0] < mw) & (uv[:, 1] >= 0) & (uv[:, 1] < mh)
                     obs_img[uv[ok, 1], uv[ok, 0]] = 255
                     obs_img = cv2.dilate(obs_img, np.ones((3, 3), np.uint8))
+            if nav.state != "parado" and r and not trackable(r[:2], margin=0.05):
+                nav.cancel()                                     # saindo da área rastreável: para antes de perder
+                msg, msg_t = "parou: saindo da area", time.time()
             nav.step(r[:2] if r else None)
             m = kinect.draw_map(trail)
             fov_layer = np.zeros_like(m)
             cv2.fillPoly(fov_layer, [fov], (60, 60, 60))
             m = cv2.add(m, fov_layer)                              # área que a câmera vê, mais clara
             cv2.polylines(m, [fov], True, (140, 140, 140), 1)
+            yl = kinect.to_map(MAX_RANGE, 0)[1]
+            cv2.line(m, (0, yl), (m.shape[1], yl), (0, 140, 255), 1)    # limite de alcance
+            if time.time() - msg_t < 2:
+                cv2.putText(m, msg, (8, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             if obs_img is not None:
                 m[obs_img > 0] = (40, 40, 220)                     # obstáculos em vermelho
             if nav.goal:

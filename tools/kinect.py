@@ -116,7 +116,9 @@ def find_robot(d, n, c, hmin=0.03, hmax=0.45, min_px=150, max_size=0.35, top_min
     import cv2
     P, v, u = points(d)
     h = P @ n + c
-    sel = (h > hmin) & (h < hmax)
+    # o ruído da profundidade do Kinect v1 cresce com z² (~1 cm a 2 m, ~3 cm a 3,5 m): de longe, o próprio chão
+    # passaria de 3 cm, colaria no robô e a bolha ficaria grande demais. O limiar acompanha.
+    sel = (h > np.maximum(hmin, 0.0025 * P[:, 2] ** 2 * 4)) & (h < hmax)
     mask = np.zeros(d.shape, np.uint8)
     mask[v[sel], u[sel]] = 255
     k, lab, stats, _ = cv2.connectedComponentsWithStats(cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)))
@@ -124,9 +126,10 @@ def find_robot(d, n, c, hmin=0.03, hmax=0.45, min_px=150, max_size=0.35, top_min
     labs = lab[v, u]
     best = None
     for i in range(1, k):
-        if stats[i, cv2.CC_STAT_AREA] < min_px:
-            continue
         blob = labs == i
+        zc = float(P[blob, 2].mean()) if blob.any() else 1.0
+        if stats[i, cv2.CC_STAT_AREA] < max(30, min_px / zc ** 2):   # de longe o robô ocupa menos pixels (∝ 1/z²)
+            continue
         q = P[blob] - np.outer(P[blob] @ n + c, n) - o   # pontos da bolha projetados no chão
         fx, fy = q @ ex, q @ ey
         # tamanho no chão de robô (o rodapé da parede ou um móvel é uma bolha maior que isso)
