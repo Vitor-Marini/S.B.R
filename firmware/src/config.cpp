@@ -152,7 +152,7 @@ void ConfigManager::print() {
     term.printf("  Max V:  %.2f m/s\n", maxVelocity);
     term.printf("  Max T:  %.1f °/s\n", maxTurnRate);
     term.printf("  Posição: hkp %.2f  move: mva %.2f m/s²  mvs %.2f m/s\n", holdKp, moveAccel, moveSpeed);
-    term.printf("--- Controle: %s ---\n", useLqr ? "LQR" : "PD + cascata");
+    term.printf("--- Controle: %s ---\n", useRl ? "RL (rede)" : useLqr ? "LQR" : "PD + cascata");
     term.printf("  LQR: lkt %.3f /°  lkw %.4f /(°/s)  lkx %.2f /m  lkv %.2f /(m/s)\n", lqrKt, lqrKw, lqrKx, lqrKv);
     term.print ("--- Filter ---\n");
     term.printf("  Acc bias X: %.2f  Z: %.2f\n", filter.accBiasX, filter.accBiasZ);

@@ -244,6 +244,8 @@ void VelocityController::_updateLqr(float dt) {
         ex = copysignf(slip, ex);
     }
     _lqrAccel = constrain(cfg.lqrKx * ex + cfg.lqrKv * (v - vr) + ar, -LQR_MAX_ACCEL, LQR_MAX_ACCEL);
+    _rlPosErr = ex;          // a rede (ctl rl) usa a mesma referência: drive e move funcionam igual
+    _rlVelErr = v - vr;
     _angleOffset = degrees(ar / 9.81f);
 }
 

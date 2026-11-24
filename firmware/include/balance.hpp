@@ -19,6 +19,7 @@ public:
     void setTurnOffset(float offset) { _turnOffset = offset; }
     void setSpeedFF(float ms) { _ff = ms; }  // velocidade pedida, direto nas rodas
     void setExtraAccel(float a) { _extra = a; }  // LQR: termos de posição/velocidade (m/s²)
+    void setRlState(float posErr, float velErr) { _rlPos = posErr; _rlVel = velErr; }
 
     void resetIntegral();  // zera a velocidade integrada (entrar em IDLE/FAULT/ACTIVE)
 
@@ -30,6 +31,7 @@ private:
     float _angleOffset = 0.0f;
     float _turnOffset = 0.0f;  // m/s de diferença entre rodas; positivo = vira à esquerda
     float _extra = 0.0f;
+    float _rlPos = 0.0f, _rlVel = 0.0f, _rlLast = 0.0f;  // RL: entradas e a última ação da rede
 };
 
 extern BalanceController balance;
