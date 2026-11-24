@@ -29,8 +29,8 @@ TURN_ONLY = 35.0      # °: acima disso de erro de rumo, só gira (não anda tor
 ARRIVE = 0.04         # m: chegou
 ALIGN_DIST = 0.10     # m: anda reto isso pra descobrir o rumo no mapa
 FACE_TOL = 3.0        # °: virou pra direção pedida
-MAX_RANGE = 2.5       # m à frente da câmera: além disso o rastreio fica fraco (medir e ajustar)
-MARGIN = 0.15         # m: alvo longe da borda do que a câmera vê (o robô inteiro tem que caber na imagem)
+MAX_RANGE = 2.3       # m à frente da câmera: medido, começa a falhar ~2,5 m (perto da borda)
+MARGIN = 0.20         # m: alvo longe da borda do que a câmera vê (o robô inteiro tem que caber na imagem)
 
 
 def wrap(a):
