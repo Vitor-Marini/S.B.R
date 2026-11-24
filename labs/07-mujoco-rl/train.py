@@ -25,13 +25,13 @@ MODEL = os.path.join(HERE, "models", "ppo_balance.zip")
 
 def lqr_action(c):
     """The firmware LQR written as a policy (same gains, same caps), for a fair comparison."""
-    a = 0.744 * c.pitch + 0.0707 * c.rate + max(-5, min(5, 27.67 * c.x + 14.04 * c.wheel))
+    a = 0.744 * c.pitch + 0.0707 * c.rate + max(-5, min(5, 27.67 * c.ex + 14.04 * c.wheel))
     return np.array([np.clip(a / E.A_MAX, -1, 1)], np.float32)
 
 
-def episode(act, seed, randomize, push=None, seconds=E.EPISODE_S):
-    """One episode; push=(time s, newtons). Returns (fell, x array, pitch array)."""
-    env = E.BalanceEnv(randomize=randomize, pushes=False)
+def episode(act, seed, randomize, push=None, seconds=E.EPISODE_S, bias=0.0):
+    """One episode; push=(time s, newtons); bias = setpoint error (°). Returns (fell, x array, pitch array)."""
+    env = E.BalanceEnv(randomize=randomize, pushes=False, bias=bias)
     obs, _ = env.reset(seed=seed)
     xs, ths = [], []
     for i in range(int(seconds / sim.DT)):
@@ -48,7 +48,8 @@ def episode(act, seed, randomize, push=None, seconds=E.EPISODE_S):
 def compare(policy):
     acts = {"LQR (firmware)": lambda o, c: lqr_action(c),
             "PPO policy": lambda o, c: policy.predict(o, deterministic=True)[0]}
-    print(f"{'':16} {'still: x range':>15} {'pitch jitter':>13} {'push survived':>14} {'random robots':>14}")
+    print(f"{'':16} {'still: x range':>15} {'pitch jitter':>13} {'push survived':>14} {'random robots':>14} "
+          f"{'setpoint +2.75°: push':>22}")
     for name, act in acts.items():
         fell, x, th = episode(act, 0, randomize=False)
         sel = slice(int(2 / sim.DT), None)
@@ -56,7 +57,9 @@ def compare(policy):
         jit = "" if fell else f"±{th[sel].std():.2f}°"
         held = [n for n in (2, 4, 6, 8, 10, 12, 14) if not episode(act, 0, False, push=(1.0, n), seconds=5)[0]]
         robots = sum(not episode(act, 100 + k, randomize=True)[0] for k in range(20))
-        print(f"{name:16} {still:>15} {jit:>13} {f'{max(held) if held else 0} N':>14} {f'{robots}/20 stand':>14}")
+        biased = [n for n in (0, 2, 4, 6, 8) if not episode(act, 0, False, push=(3.0, n), seconds=6, bias=2.75)[0]]
+        b = f"{max(biased)} N" if biased else "FELL"
+        print(f"{name:16} {still:>15} {jit:>13} {f'{max(held) if held else 0} N':>14} {f'{robots}/20 stand':>14} {b:>22}")
 
 
 def train(steps):

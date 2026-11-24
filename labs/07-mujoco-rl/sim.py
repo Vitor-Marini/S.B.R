@@ -68,7 +68,7 @@ class FirmwareLQR:
 class Sim:
     """Physics at 1 ms, control at 5 ms with the firmware's complementary filter and a 1-tick sensor delay."""
 
-    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None, params=None):
+    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None, params=None, delay=1):
         params = params or P                       # a different robot (domain randomization) or the real one
         self.m = mujoco.MjModel.from_xml_string(build_mjcf.build(params))
         self.d = mujoco.MjData(self.m)
@@ -84,7 +84,7 @@ class Sim:
         self.dist = params["disturbance_torque"] if disturbance is None else disturbance
         self.sub = int(round(DT / self.m.opt.timestep))
         self.pitch = self.true_pitch()
-        self.delayed = (self.pitch, 0.0)
+        self.delayed = [(self.pitch, 0.0)] * delay      # sensor → controller, in control ticks
         self.t = 0.0
         self.body = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "robot")
 
@@ -104,8 +104,8 @@ class Sim:
         self._push = (newtons, self.t + seconds)
 
     def step(self):
-        meas = self.delayed
-        self.delayed = self.sensors()
+        meas = self.delayed.pop(0)
+        self.delayed.append(self.sensors())
         wheel = self.c.step(*meas)
         self.d.ctrl[:] = wheel / R
         f = getattr(self, "_push", None)

@@ -86,8 +86,39 @@ PPO, 2×32 network, 3M steps on 8 CPU processes: **~6 minutes**.
 A network that knows no physics matched the LQR in minutes: firmer body, a bit more drift (the reward weights
 decide that trade). Watch it: `.venv/bin/python labs/07-mujoco-rl/train.py view` (P push · L LQR/policy · R random robot).
 
+## Step 3: sim-to-real, round 1 → v2 → v3
+
+**First real test (v1):** the network balanced the real robot for **28 s** on its first try — but with a constant
++2.75° setpoint error (the gyro-zero transient right after calibration) it sat ~10 cm off its reference, and a light
+push made it over-correct into a growing oscillation and fall. The simulator never had a wrong setpoint.
+
+Each gap the real robot shows becomes something randomized in training:
+
+| | v1 | v2 | v3 |
+|---|---|---|---|
+| setpoint error | 0 | ±3° | ±3° |
+| sensor delay | 5 ms | 5–15 ms | 5–15 ms |
+| pushes | ±6 N, 0.1 s, every ~2 s | ±8 N, 0.05–0.2 s, ~2 s | ±6 N, 0.05–0.2 s, ~3.5 s |
+| position weight `W_X` | 0.05 | 0.05 | 0.03 |
+| firmware position limit (9 cm) | no | yes | yes |
+
+| | still: x range | pitch jitter | push | 20 random robots | setpoint +2.75° + push |
+|---|---|---|---|---|---|
+| LQR | ±0.6 cm | ±0.43° | 6 N | 20/20 | 4 N |
+| v1 | ±1.1 cm | ±0.18° | 4 N | 20/20 | 4 N |
+| v2 | **±23 cm** | ±0.17° | 4 N | 20/20 | **6 N** |
+| **v3** | **±0.6 cm** | ±0.19° | 4 N | 20/20 | 4 N |
+
+**v2's lesson:** with frequent 8 N pushes it fell so often that "don't fall" was all that paid — holding position
+stopped mattering and it wandered ±23 cm. The reward and the randomization decide what is learned. v3 (fewer, softer
+pushes, stronger position weight) holds its place like the LQR.
+
+**On the ESP32-C3** (no FPU): the network in float took **3.2 ms** (budget: 5 ms for the whole loop); with a tanh
+table 2.2 ms; in **fixed point** (Q12 int16 weights, int32 sums, hardware multiply) **103 µs**. `export.py` checks
+the C against PyTorch (max error ~1e-3).
+
 ## Next
 
 1. ✅ Gymnasium environment with domain randomization. 2. ✅ PPO, compared with LQR.
-3. Export the small network to C, time it on the ESP32-C3 (no FPU), try it on the robot as `ctl rl`.
+3. ✅ Exported to C (fixed point), runs as `ctl rl`; v1 balanced 28 s on the real robot. Next: v3 on the floor.
 4. Later: the same `model/params.json` → URDF → Isaac Sim on the RTX 4060 Ti machine (lab 08).
