@@ -14,3 +14,4 @@ model/sbr.xml
 labs/07-mujoco-rl/models/ppo_v4_*M.zip
 !labs/07-mujoco-rl/models/ppo_v4_20M.zip
 labs/07-mujoco-rl/models/ppo_v5_*M.zip
+model/sbr.usda
