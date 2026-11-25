@@ -3,7 +3,7 @@
 > **In one sentence:** a physics simulator of the robot, trustworthy because it reproduces the real robot with the
 > real controllers — the playground where a neural network can learn to balance.
 
-**Status:** 🟡 simulator validated · v1–v3 ran on the robot · v4 (bang-bang) and v5 (lazy sway) not good enough yet — see steps 4–5.
+**Status:** ⏸ paused · simulator validated · best policy: **v3** (ran on the robot) · v4/v5 not good enough — see "Where we stopped".
 
 ## Why simulate first
 
@@ -189,6 +189,25 @@ Standing, frequency of the tilt wobble:
 1.5 Hz sway. The reward now pays it 0.93/step vs the LQR's 0.47, because the simulated LQR itself chatters at 20 Hz and
 pays a lot of effort. Even a 1° tilt weight keeps v5 ahead. Lesson: "the LQR scores higher" was the wrong yardstick;
 the reward's optimum has to be stiff *and* smooth, which means a tilt weight around 0.5° against this effort weight.
+
+## Where we stopped (2026-11-25) — paused
+
+The robot stays on the **LQR**: no policy beats it yet.
+
+| policy | file | verdict |
+|---|---|---|
+| **v3** | `models/ppo_balance.zip` (= `ppo_balance_v3.zip`) | **best one to date.** The only policy that fits the current firmware (`firmware/include/rl_policy.h`, `ctl rl`) and that ran on the real robot: balanced, drove 4 m at 0.4 m/s with turns. Flaws: jerks at joystick changes, falls into a bang-bang oscillation after a push |
+| v4 20M | `models/ppo_v4_20M.zip` | closest to the LQR **in simulation** (driving, demo, pushes, grout tie), but an 8.5 Hz bang-bang shake standing (±1.56°). Needs the 24-input firmware |
+| v5 | `models/ppo_v5.zip` | smooth, no bang-bang, but a lazy 1.5 Hz sway (±2.3°). Needs the 24-input firmware |
+
+**To pick it up again:**
+1. v6 = v5 with `W_TH` ≈ 0.5° (one line in `env.py`), 30M steps (~1 h). Check first with the per-checkpoint wobble
+   analysis (tilt std, peak frequency, % saturated) — the battery alone hid *how* each version shook.
+2. Before any v4+ goes to the robot: firmware must compute the same observation (`Reference` ramps, θref, 3-frame
+   history → 24 inputs) and `export.py` must stop hardcoding 5 inputs / 32 hidden.
+3. Lessons: score candidate rewards against existing policies *before* training (it caught v4's cause in minutes);
+   clipped or convex rewards pay bang-bang; "beats the LQR's score" is the wrong yardstick when the LQR itself
+   chatters in the sim.
 
 ## Next
 

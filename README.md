@@ -34,7 +34,7 @@ flowchart LR
 | 04 | [Odometry calibration](labs/04-odometry-calibration/) | gyro scale, wheel track, the 5-turn test | ✅ demo returns within 0.5 cm |
 | 05 | [Web control](labs/05-web-control/) | the robot serves a control page; WebSocket; Gamepad API | ✅ in use |
 | 06 | [Kinect navigation](labs/06-kinect-navigation/) | depth camera: floor plane, robot tracking, click-to-go | ⏸ works, paused |
-| 07 | [MuJoCo + reinforcement learning](labs/07-mujoco-rl/) | simulate the robot, train a policy, compare with LQR | 🟡 simulator validated |
+| 07 | [MuJoCo + reinforcement learning](labs/07-mujoco-rl/) | simulate the robot, train a policy, compare with LQR | ⏸ paused · best policy v3 ran on the robot |
 | 08 | Isaac Sim | the same robot on the RTX machine | 💭 later |
 
 ## Repository
