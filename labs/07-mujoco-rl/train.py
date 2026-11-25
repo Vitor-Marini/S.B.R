@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train the v4 policy (every situation of a day of use) and run the test battery against the firmware LQR.
+"""Train the v5 policy (every situation of a day of use) and run the test battery against the firmware LQR.
 
     .venv/bin/python labs/07-mujoco-rl/train.py [steps]       → trains (default 30M, 16 processes, curriculum),
                                                                checkpoints every 5M in models/, then the battery
@@ -25,7 +25,8 @@ sys.path.insert(0, HERE)
 import env as E  # noqa: E402
 import sim  # noqa: E402
 
-MODEL = os.path.join(HERE, "models", "ppo_v4.zip")
+MODEL = os.path.join(HERE, "models", "ppo_v5.zip")
+D_MAX = 0.8                    # LQR survives 60/60 at 0.6, 53/60 at 0.8, 35/60 at 1.0 (v4 trained to 1.0)
 N_ENVS = 32                    # measured: 16 → 6.7k steps/s, 32 → 7.7k, 64 → 8.4k but 2× RAM; 128 ran out of 15 GB
 
 
@@ -93,6 +94,8 @@ def battery(policy):
         r["grout at 0.3 m/s"] = "FELL" if f else f"max tilt {np.abs(th).max():.1f}°"
         ok = sum(not run(act, randomize=True, scenario="mixed", seed=1000 + k)[0] for k in range(50))
         r["50 random robots"] = f"{ok}/50"
+        ok = sum(not run(act, randomize=True, scenario="mixed", seed=1000 + k, difficulty=0.8)[0] for k in range(50))
+        r["50 robots, diff 0.8"] = f"{ok}/50"
         rows[name] = r
     print(f"\n{'test':20}" + "".join(f"{n:>24}" for n in rows))
     for test in next(iter(rows.values())):
@@ -108,13 +111,13 @@ def train(steps):
     torch.set_num_threads(1)   # measured faster than 2 or 4 with 32 workers
 
     class Curriculum(BaseCallback):
-        """difficulty 0.2 → 1 over the first 60 % of training; log + checkpoint every 5M steps."""
+        """difficulty 0.2 → D_MAX over the first 60 % of training; log + checkpoint every 5M steps."""
         def __init__(self):
             super().__init__()
             self.t0, self.next_log = time.time(), 0
 
         def _on_rollout_start(self):
-            d = min(1.0, 0.2 + 0.8 * self.num_timesteps / (0.6 * steps))
+            d = min(D_MAX, 0.2 + (D_MAX - 0.2) * self.num_timesteps / (0.6 * steps))
             self.training_env.env_method("set_difficulty", d)
 
         def _on_step(self):
@@ -126,7 +129,7 @@ def train(steps):
                           f"episode {np.mean([e['l'] for e in buf]) * sim.DT:4.1f}/15 s  reward "
                           f"{np.mean([e['r'] for e in buf]):7.1f}", flush=True)
                 if self.num_timesteps >= 5_000_000 and self.num_timesteps % 5_000_000 < 8192:
-                    self.model.save(os.path.join(HERE, "models", f"ppo_v4_{self.num_timesteps // 1_000_000}M"))
+                    self.model.save(os.path.join(HERE, "models", f"ppo_v5_{self.num_timesteps // 1_000_000}M"))
                 self.next_log += 1_000_000
             return True
 

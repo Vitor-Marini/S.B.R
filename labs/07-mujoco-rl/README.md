@@ -3,7 +3,7 @@
 > **In one sentence:** a physics simulator of the robot, trustworthy because it reproduces the real robot with the
 > real controllers — the playground where a neural network can learn to balance.
 
-**Status:** 🟡 simulator validated · policy trained (matches LQR in simulation). Next: run it on the ESP32-C3.
+**Status:** 🟡 simulator validated · v1–v3 ran on the robot · v4 (bang-bang) and v5 (lazy sway) not good enough yet — see steps 4–5.
 
 ## Why simulate first
 
@@ -152,6 +152,43 @@ Suspected causes, to fix before training again:
    matters) the network gets no signal about doing *less* badly. Use a smooth shape, e.g. `exp(−cost/20)`.
 2. **Difficulty 1 is beyond the LQR itself** (32/50): cap the curriculum where the LQR still survives most episodes.
 3. **Shaking:** tilt is weighted loosely (8°) next to everything else; jitter isn't penalized directly.
+
+## Step 5: v5 — fixing the reward
+
+**The real cause of v4's shake** (found by scoring existing policies before retraining): the clipped reward ranked
+v4's shaking *above* the LQR standing (0.60 vs 0.43 per step). Its shake was an 8.5 Hz bang-bang (action saturated
+97 % of the time), and with the cost capped each ±1 switch cost at most "one bad step". `exp(−cost/20)` has the same
+flaw: any convex/clipped shape rewards alternating great and terrible steps over a steady medium cost.
+
+| | v4 | v5 |
+|---|---|---|
+| reward | `1 − min(1, cost/20)` | `1 − min(1, state/40) − effort/40`: linear, only the state part capped, effort (action + jerk) always paid in full |
+| tilt / rate weight | 8° / 100 °/s | 4° / 50 °/s |
+| curriculum | 0.2 → 1.0 (LQR survives 35/60) | 0.2 → **0.8** (LQR survives 53/60) |
+
+| test | LQR | v4 20M | v5 30M |
+|---|---|---|---|
+| still | ±0.7 cm ±0.43° | ±0.9 cm ±1.56° | ±0.8 cm ±2.35° |
+| still, setpoint +2.75° | ±0.7 cm ±0.43° | ±0.9 cm ±1.57° | ±2.0 cm ±2.43° |
+| joystick drive | max tilt 9.4° | 9.4° | 13.3° |
+| demo | 9.6 cm off | 10.4 cm | 10.8 cm |
+| push ladder | 6 N | 6 N | 6 N |
+| grout at 0.3 m/s | 9.0° | 9.6° | 12.9° |
+| 50 random robots (diff 1.0) | 32/50 | 27/50 | 24/50 |
+| 50 random robots (diff 0.8) | 43/50 | — | 40/50 |
+
+Standing, frequency of the tilt wobble:
+
+| | tilt std | peak | action saturated |
+|---|---|---|---|
+| LQR | 0.42° | 20 Hz | 45 % |
+| v4 20M | 1.56° | 8.6 Hz | 97 % |
+| v5 10M → 30M | 2.0–3.1° | 2.4 → 1.4 Hz | 8–12 % |
+
+**v5 traded one flaw for the opposite one:** the bang-bang is gone (smooth, little effort), but it is *lazy* — a slow
+1.5 Hz sway. The reward now pays it 0.93/step vs the LQR's 0.47, because the simulated LQR itself chatters at 20 Hz and
+pays a lot of effort. Even a 1° tilt weight keeps v5 ahead. Lesson: "the LQR scores higher" was the wrong yardstick;
+the reward's optimum has to be stiff *and* smooth, which means a tilt weight around 0.5° against this effort weight.
 
 ## Next
 

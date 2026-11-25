@@ -13,7 +13,7 @@ fell into a ±4 m/s² bang-bang oscillation after a push. v4 trains every situat
     observation  last 3 frames × 8: measured pitch −θref /10°, rate /100 °/s, (v − v_ref) /0.5, position error /0.2,
                  v_ref /0.5, a_ref /1, turn command /45, last action                        ← all known to the firmware
     action       wheel acceleration, ±1 × 4 m/s² (firmware cap)
-    reward       1 − 0.05 × cost, cost = LQR-style errors around the REFERENCE + jerk (Δaction): punishes bang-bang
+    reward       1 − min(1, state/40) − effort/40 (linear; effort = action + jerk, never capped): punishes bang-bang
 
     .venv/bin/python labs/07-mujoco-rl/env.py selftest
 """
@@ -39,7 +39,8 @@ TRACK = 0.150
 HISTORY = 3
 FRAME = 8
 # cost weights (Bryson): the deviation each term may reach before it "hurts"
-W_X, W_V, W_TH, W_W, W_A, W_JERK = 0.03, 0.4, 8.0, 100.0, 1.5, 0.5
+W_X, W_V, W_TH, W_W, W_A, W_JERK = 0.03, 0.4, 4.0, 50.0, 1.5, 0.5
+COST_SCALE = 40.0        # LQR standing ≈ 0.48/step, v4's 8.5 Hz shake ≈ 0.26 (measured)
 
 
 class Reference:
@@ -191,10 +192,12 @@ class BalanceEnv(gym.Env):
         self.hist = self.hist[1:] + [c.frame()]
         r = c.ref
         th = self.sim.true_pitch() - math.degrees(r.ar / 9.81)
-        cost = ((c.ex / W_X) ** 2 + ((c.wheel - r.vr) / W_V) ** 2 + (th / W_TH) ** 2 + (c.rate / W_W) ** 2
-                + (c.action * A_MAX / W_A) ** 2 + ((c.action - c.prev_action) * A_MAX / W_JERK) ** 2)
+        state = (c.ex / W_X) ** 2 + ((c.wheel - r.vr) / W_V) ** 2 + (th / W_TH) ** 2 + (c.rate / W_W) ** 2
+        effort = (c.action * A_MAX / W_A) ** 2 + ((c.action - c.prev_action) * A_MAX / W_JERK) ** 2
         fell = abs(self.sim.true_pitch()) > FALL_DEG
-        reward = 1.0 - min(1.0, 0.05 * cost)
+        # v5: linear, and only the state part is capped (a push can make it explode); effort is bounded by itself and
+        # must never be capped — v4's clipped reward made rare ±1 switches cheap, so bang-bang scored above the LQR
+        reward = 1.0 - min(1.0, state / COST_SCALE) - effort / COST_SCALE
         truncated = self.steps * sim.DT >= getattr(self, "max_s", EPISODE_S)
         return self._obs(), reward, fell, truncated, {"x": self.sim.d.qpos[0], "y": self.sim.d.qpos[1]}
 
