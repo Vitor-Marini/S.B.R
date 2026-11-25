@@ -1,0 +1,777 @@
+{
+  "description": "S.B.R mk2 - malhas para simulacao (MuJoCo / Isaac Lab). Todos os STL no sistema de coordenadas da montagem do Fusion, em mm, sem nenhuma transformacao.",
+  "units": "mm",
+  "source_document": "S.B.R mk2",
+  "frame": {
+    "origin": "origem da montagem do Fusion (fica no eixo do motor esquerdo; o chao esta em z = -37.5)",
+    "up_axis": "+Z",
+    "forward_axis": "-Y (lado para onde aponta a chave liga/desliga e o USB da ESP32) - ver ambiguities",
+    "left_axis": "+X (com up=+Z e forward=-Y, regra da mao direita)",
+    "ground_z_mm": -37.5
+  },
+  "wheel_axle": {
+    "center_mm": [
+      -50.05,
+      -0.2625,
+      0.0
+    ],
+    "direction": [
+      0.999994,
+      -0.003498,
+      0.0
+    ],
+    "direction_nominal": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "note": "Vetor medido entre os centros das rodas (aponta para a roda esquerda). Os eixos dos dois motores no CAD estao desalinhados 0.525 mm em Y (esq. y=-0.525, dir. y=0.0); na pratica use [1,0,0].",
+    "track_width_mm": 150.101
+  },
+  "wheels": {
+    "wheel_left": {
+      "center_mm": [
+        25.0,
+        -0.525,
+        0.0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "diameter_mm": 75.0,
+      "groove_root_diameter_mm": 72.0,
+      "width_mm": 18.0,
+      "x_range_mm": [
+        16.0,
+        34.0
+      ],
+      "fusion_mass_tire_hub_kg": 0.03439
+    },
+    "wheel_right": {
+      "center_mm": [
+        -125.1,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "diameter_mm": 75.0,
+      "groove_root_diameter_mm": 72.0,
+      "width_mm": 18.0,
+      "x_range_mm": [
+        -134.1,
+        -116.1
+      ],
+      "fusion_mass_tire_hub_kg": 0.03439
+    }
+  },
+  "files": {
+    "body.stl": {
+      "triangles": 38282,
+      "size_bytes": 1914184,
+      "bbox_min_mm": [
+        -112.6,
+        -39.8,
+        -21.2
+      ],
+      "bbox_max_mm": [
+        12.5,
+        35.575,
+        150.0
+      ],
+      "fusion_mass_kg": 1.197,
+      "fusion_com_mm": [
+        -50.025,
+        -2.237,
+        35.49
+      ],
+      "fusion_bodies": [
+        {
+          "component": "CHASSI_Battery_SHELF:1",
+          "body": "Body1",
+          "material": "PLA",
+          "mass_kg": 0.04092
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:2",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:3",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:4",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:5",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Pines:1+Cuerpo007:6",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00288
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo002:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.165
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+M3x28-Tornillo:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+M3x28-Tornillo004:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+M3x28-Tornillo005:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+M3x28-Tornillo006:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo004:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00082
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo005:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0009
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo006:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0029
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo008:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.09625
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo001:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.09239
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:2",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:3",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:4",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:5",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Pines:1+Cuerpo007:6",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00288
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo002:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.165
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+M3x28-Tornillo:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+M3x28-Tornillo004:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+M3x28-Tornillo005:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+M3x28-Tornillo006:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0019
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo004:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00082
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo005:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0009
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo006:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0029
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo008:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.09625
+        },
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo001:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.09239
+        },
+        {
+          "component": "LINK-SHELF-to-B_ADPTOR:1",
+          "body": "Body1",
+          "material": "PLA",
+          "mass_kg": 0.01722
+        },
+        {
+          "component": "makita_10.8v_v38:1",
+          "body": "body",
+          "material": "Steel",
+          "mass_kg": 0.18018
+        },
+        {
+          "component": "makita_10.8v_v38:1",
+          "body": "Cable Holder 1",
+          "material": "Steel",
+          "mass_kg": 0.00368
+        },
+        {
+          "component": "CHASSI_Pcb_SHELF:1",
+          "body": "Body1",
+          "material": "PLA",
+          "mass_kg": 0.02736
+        },
+        {
+          "component": "CHASSI_PowerSwitch_HOLDER:1",
+          "body": "Body1",
+          "material": "PLA",
+          "mass_kg": 0.00711
+        },
+        {
+          "component": "21mm round on-off switch:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00025
+        },
+        {
+          "component": "21mm round on-off switch:1",
+          "body": "Body2",
+          "material": "Steel",
+          "mass_kg": 0.03882
+        },
+        {
+          "component": "CHASSI_IMU_SHELF:1",
+          "body": "IMU_SHELF",
+          "material": "PLA",
+          "mass_kg": 0.05027
+        },
+        {
+          "component": "CHASSI_SideFrame_LEFT_mk2:1",
+          "body": "SideFrame_LEFT_mk2",
+          "material": "PLA",
+          "mass_kg": 0.04284
+        },
+        {
+          "component": "CHASSI_SideFrame_RIGHT_mk2:1",
+          "body": "SideFrame_RIGHT_mk2",
+          "material": "PLA",
+          "mass_kg": 0.04284
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.00345
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body2",
+          "material": "Steel",
+          "mass_kg": 0.00018
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body3",
+          "material": "Steel",
+          "mass_kg": 0.00011
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body4",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body5",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body6",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body7",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body8",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body9",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body10",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body11",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body12",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body13",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body14",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body15",
+          "material": "Steel",
+          "mass_kg": 3e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body16",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body17",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body18",
+          "material": "Steel",
+          "mass_kg": 2e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body19",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body20",
+          "material": "Steel",
+          "mass_kg": 3e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body21",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body22",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body23",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body24",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body25",
+          "material": "Steel",
+          "mass_kg": 3e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body26",
+          "material": "Steel",
+          "mass_kg": 0.0
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body27",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body28",
+          "material": "Steel",
+          "mass_kg": 1e-05
+        },
+        {
+          "component": "MPU_6050:1+pcb:1",
+          "body": "Body29",
+          "material": "Steel",
+          "mass_kg": 0.0
+        },
+        {
+          "component": "CHASSI_PowerSwitch_COVER:1",
+          "body": "PowerSwitch_COVER",
+          "material": "PLA",
+          "mass_kg": 0.00379
+        }
+      ]
+    },
+    "wheel_left.stl": {
+      "triangles": 8142,
+      "size_bytes": 407184,
+      "bbox_min_mm": [
+        -28.48,
+        -38.012,
+        -37.487
+      ],
+      "bbox_max_mm": [
+        34.0,
+        36.961,
+        37.487
+      ],
+      "fusion_mass_kg": 0.091,
+      "fusion_com_mm": [
+        4.136,
+        -0.48,
+        0.0
+      ],
+      "fusion_bodies": [
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:1+Cuerpo003:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0566
+        },
+        {
+          "component": "RODA_mk2:1",
+          "body": "RODA_mk2",
+          "material": "PETG",
+          "mass_kg": 0.03439
+        }
+      ]
+    },
+    "wheel_right.stl": {
+      "triangles": 8142,
+      "size_bytes": 407184,
+      "bbox_min_mm": [
+        -134.1,
+        -37.487,
+        -37.487
+      ],
+      "bbox_max_mm": [
+        -71.75,
+        37.487,
+        37.487
+      ],
+      "fusion_mass_kg": 0.091,
+      "fusion_com_mm": [
+        -104.316,
+        -0.045,
+        0.0
+      ],
+      "fusion_bodies": [
+        {
+          "component": "NEMA 17 Stepper Motor 39mm:2+Cuerpo003:1",
+          "body": "Body1",
+          "material": "Steel",
+          "mass_kg": 0.0566
+        },
+        {
+          "component": "RODA_mk2:2",
+          "body": "RODA_mk2",
+          "material": "PETG",
+          "mass_kg": 0.03439
+        }
+      ]
+    },
+    "battery.stl": {
+      "triangles": 6484,
+      "size_bytes": 324284,
+      "bbox_min_mm": [
+        -80.0,
+        -40.0,
+        77.0
+      ],
+      "bbox_max_mm": [
+        -19.5,
+        40.5,
+        121.0
+      ],
+      "fusion_mass_kg": 0.21,
+      "fusion_com_mm": [
+        -49.996,
+        1.77,
+        93.905
+      ],
+      "fusion_bodies": [
+        {
+          "component": "battery makita 12v.SLDPRT:1",
+          "body": "Boss-Extrude7",
+          "material": "Bateria Makita 12V 1.5Ah (modelo)",
+          "mass_kg": 0.21
+        }
+      ]
+    }
+  },
+  "assembly_total": {
+    "fusion_mass_kg": 1.5889,
+    "fusion_com_mm": [
+      -50.028,
+      -1.482,
+      39.146
+    ]
+  },
+  "mass_note": "Massas e CoM calculados pelo Fusion com os materiais do modelo (pecas impressas 100% solidas, NEMA17 com 425 g cada). O robo real pesa ~1.0-1.07 kg; use os valores medidos/calibrados para a fisica.",
+  "excluded_from_export": [
+    {
+      "component": "CHASSI_SideFrame_LEFT:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_SideFrame_RIGHT:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "makita_10.8v_v38:1",
+      "body": "terminal",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "makita_10.8v_v38:1",
+      "body": "terminal (1)",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "makita_10.8v_v38:1",
+      "body": "cover",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "makita_10.8v_v38:1",
+      "body": "Terminal Certo",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "makita_10.8v_v38:1",
+      "body": "Cable Holder 2",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Battery :1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Whell:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Fast Wheel Couple:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Wheel Ready:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Wheel Ready:2",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body7",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body8",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body9",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body12",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "CHASSI_mpu_HOLDER:1",
+      "body": "Body13",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "WheelSmall:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Whell Medium:1",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "Whell Medium:2",
+      "body": "Body1",
+      "reason": "oculto no modelo"
+    },
+    {
+      "component": "SUPORTE_Vertical_v1_macico:1",
+      "body": "Suporte_Vertical",
+      "reason": "suporte de bancada, nao faz parte do robo"
+    },
+    {
+      "component": "SUPORTE_Vertical_mini:1",
+      "body": "Suporte_Vertical_mini",
+      "reason": "suporte de bancada, nao faz parte do robo"
+    }
+  ],
+  "ambiguities": [
+    "Eixo do motor (componente Cuerpo003 de cada NEMA 17, aco, ~57 g, 62 mm de comprimento) gira junto com a roda: foi para wheel_left/wheel_right, nao para body. Por isso a caixa envolvente das rodas entra ~44 mm para dentro do corpo e a massa de cada roda inclui o eixo. Dimensoes e centro da roda acima sao so do pneu+cubo.",
+    "Frente do robo: um robo de equilibrio e simetrico; foi adotado forward = -Y (lado da chave e do USB). Se o seu codigo usa a outra frente, troque o sinal e esquerda/direita.",
+    "Capa da chave (CHASSI_PowerSwitch_COVER) estava oculta no modelo, mas existe no robo real: foi incluida em body.",
+    "Suporte de bancada (SUPORTE_Vertical_mini) estava visivel mas nao faz parte do robo: ficou de fora.",
+    "Terminais e tampa do adaptador Makita estavam ocultos no CAD: ficaram de fora (pecas pequenas).",
+    "Nao existe rotor do motor modelado separado; o set screw/porca da roda nao estao modelados."
+  ]
+}
