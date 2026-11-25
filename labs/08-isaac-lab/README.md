@@ -3,7 +3,7 @@
 > **In one sentence:** the same robot as lab 07, but simulated thousands at a time on the RTX 4060 Ti — to see what
 > GPU-parallel training changes compared with MuJoCo on the CPU.
 
-**Status:** 🟡 step 1 done: robot model loads and behaves. Next: validate with the firmware LQR, then train.
+**Status:** 🟡 steps 1–2 done: the model matches the real robot and lab 07 with the firmware LQR. Next: train.
 
 ## Where it runs
 
@@ -44,7 +44,38 @@ python labs/08-isaac-lab/model_check.py         # checks: masses, falls the righ
 python labs/08-isaac-lab/model_check.py --viz   # window (WSLg): 16 robots dropped at random tilts, every 3 s
 ```
 
+## Step 2: validation with the firmware LQR (`validate.py`)
+
+Same loop as lab 07's `sim.py` (physics 1 ms, control 5 ms, the firmware's complementary filter, 1-tick sensor delay,
+gyro noise, the calibrated 0.008 N·m "dirt"), the firmware LQR vectorized — and every scenario at once, one robot per
+parallel world (8 standing, 4 doing `move 50`, 6 pushed at 2–14 N). **No tuning: first run.**
+
+| LQR | real robot | lab 07 MuJoCo (CPU) | **lab 08 Newton (GPU)** |
+|---|---|---|---|
+| standing still | ±0.3–1 cm, ~±0.2° | ±0.5–0.7 cm, ±0.15° | **±0.4–0.6 cm, ±0.12–0.18°** |
+| `move 50` | ~1 cm over, 4.8 s | 1.4 cm, 4.0 s | **1.0–1.2 cm, 3.9–4.0 s, ends 0.1–0.9 cm off** |
+| push 0.1 s at the top | (LQR > PID) | 6 N | **6 N** |
+
+Two physics engines, one set of measured numbers, same robot: the model (`params.json`) is what makes them agree.
+
+**Speed — and why this loop is not the training loop yet:**
+
+| robots in parallel | control ticks/s | robot-steps/s |
+|---|---|---|
+| 18 | 28 | 510 |
+| 512 | 30 | 15k |
+| 4096 | 25 | **102k** (MuJoCo, 32 CPU processes: 7.7k) |
+
+The time per tick is flat (~35 ms) no matter how many robots: it is Python + copying GPU↔CPU every 1 ms substep, not
+physics. Even so, 4096 robots already run 13× faster than lab 07. For training, the controller/filter/reward move onto
+the GPU (torch/warp) and the 5 substeps get captured in a CUDA graph. (`--viz` therefore plays ~7× slower than real
+time.)
+
+```bash
+python labs/08-isaac-lab/validate.py          # report (~2.5 min)
+python labs/08-isaac-lab/validate.py --viz    # watch the 18 robots
+```
+
 ## Next
 
-2. The firmware LQR in Isaac must match the real robot and MuJoCo (same table as lab 07).
 3. Train with thousands of robots in parallel; compare with v3/v4/v5.
