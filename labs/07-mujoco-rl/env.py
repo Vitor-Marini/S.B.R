@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Gymnasium environment: the validated simulator (sim.py) as a game for a neural network.
+"""Gymnasium environment v4 — "a day of use" compressed into 15 s episodes (labs/07-mujoco-rl/README.md, step 4).
 
-The network replaces exactly what the LQR does in the firmware: every 5 ms it reads what the robot can measure and
-outputs a wheel acceleration. Everything around it (filter, delay, stepper, physics) stays the same.
+v1–v3 only ever saw the robot standing still. On the real floor v3 drove fine but jerked at every joystick change and
+fell into a ±4 m/s² bang-bang oscillation after a push. v4 trains every situation the robot lives today:
 
-    observation (5): filtered pitch /10°, pitch rate /100 °/s, wheel speed /0.5 m/s, position error /0.2 m,
-                     last action                                   ← all things the firmware has
-    action (1):      wheel acceleration in [−1, 1] × 4 m/s²       ← same output and cap as the firmware LQR
-    reward:          1 per step standing − the LQR cost (Bryson weights from labs/03-lqr/lqr.py), so "stand still,
-                     stay in place, don't thrash the motor" is what pays
-    episode:         10 s, or until it falls (|pitch| > 30°)
-    each reset:      a slightly different robot (L, torque, friction, noise, dirt) + random pushes during the episode
+    scenarios   still · joystick driver (speed steps up to ±0.4 m/s, reversals, stops, turning) · move/turn sequences
+                · mixed — chosen per episode
+    world       pushes, tile grout (wheels briefly resisted), floor slope ±2°, setpoint error ±3° that drifts,
+                sensor delay 5–15 ms, wheel/driver lag 0–10 ms, plus v3's robot randomization (L, mass, torque, ...)
+    curriculum  `difficulty` 0→1 scales all of the above (train.py raises it during training)
+
+    observation  last 3 frames × 8: measured pitch −θref /10°, rate /100 °/s, (v − v_ref) /0.5, position error /0.2,
+                 v_ref /0.5, a_ref /1, turn command /45, last action                        ← all known to the firmware
+    action       wheel acceleration, ±1 × 4 m/s² (firmware cap)
+    reward       1 − 0.05 × cost, cost = LQR-style errors around the REFERENCE + jerk (Δaction): punishes bang-bang
 
     .venv/bin/python labs/07-mujoco-rl/env.py selftest
 """
@@ -25,109 +28,210 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sim  # noqa: E402
 
-A_MAX = 4.0            # m/s², same cap as the firmware
-EPISODE_S = 10.0
+A_MAX = 4.0              # m/s², firmware cap
+EPISODE_S = 15.0
 FALL_DEG = 30.0
-# Bryson: the deviation each term may reach before it "hurts" (same spirit as the LQR weights)
-W_X, W_V, W_TH, W_W, W_A = 0.03, 0.4, 8.0, 100.0, 1.5   # v3: W_X 0.05→0.03 (v2 wandered ±23 cm)
-SLIP = 0.09            # m: firmware position-error limit (min(0.3, 2.5/kx) with the LQR's kx)
+SLIP = 0.09              # m: firmware position-error limit
+V_RAMP = 0.6             # m/s²: firmware joystick ramp
+W_RAMP = 240.0           # °/s²: firmware turn ramp
+MOVE_A, MOVE_V = 0.1, 0.15   # firmware move profile (mva, mvs)
+TRACK = 0.150
+HISTORY = 3
+FRAME = 8
+# cost weights (Bryson): the deviation each term may reach before it "hurts"
+W_X, W_V, W_TH, W_W, W_A, W_JERK = 0.03, 0.4, 8.0, 100.0, 1.5, 0.5
+
+
+class Reference:
+    """The firmware's reference generator (velocity.cpp _updateLqr): joystick ramp or move profile → x_ref, v_ref, a_ref;
+    turn command ramped like the firmware turn loop."""
+
+    def __init__(self):
+        self.v_target = self.w_target = 0.0
+        self.vr = self.ar = self.xref = 0.0
+        self.wr = 0.0
+        self.move = None            # [goal_abs_x, start_x, ref_p, ref_v]
+
+    def start_move(self, dist, x_now):
+        self.move = [dist, x_now, 0.0, 0.0]
+        self.v_target = 0.0
+
+    def step(self, dt):
+        if self.move:
+            goal, x0, p, v = self.move
+            g, s = abs(goal), math.copysign(1, goal)
+            vn = min(v + MOVE_A * dt, MOVE_V, math.sqrt(2 * MOVE_A * max(g - p, 0)))
+            self.ar, self.vr = s * (vn - v) / dt, s * vn
+            p = min(p + max(vn, 0.005) * dt, g)
+            self.xref = x0 + s * p
+            self.move = None if p >= g else [goal, x0, p, vn]
+            if not self.move:
+                self.vr = self.ar = 0.0
+        else:
+            prev = self.vr
+            self.vr += max(-V_RAMP * dt, min(V_RAMP * dt, self.v_target - self.vr))
+            self.ar = (self.vr - prev) / dt
+            self.xref += self.vr * dt
+        self.wr += max(-W_RAMP * dt, min(W_RAMP * dt, self.w_target - self.wr))
 
 
 class PolicyController:
-    """Same contract as FirmwareLQR (step(pitch, rate) → wheel speed), but the acceleration comes from outside."""
+    """Same contract as FirmwareLQR (step(pitch, rate) → wheel speed); the acceleration comes from the network."""
 
     def __init__(self, pitch_bias=0.0):
-        self.wheel = self.x = self.xref = self.ex = 0.0
-        self.action = 0.0
-        self.bias = pitch_bias          # setpoint error: what the real robot showed (+2.75° the first time on the floor)
+        self.wheel = self.x = self.ex = 0.0
+        self.action = self.prev_action = 0.0
+        self.bias = pitch_bias
+        self.ref = Reference()
+        self.turn_offset = 0.0
+        self.pitch = self.rate = 0.0
 
     def step(self, pitch_deg, rate_dps):
-        self.pitch, self.rate = pitch_deg + self.bias, rate_dps   # what the network will see next
+        r = self.ref
+        r.step(sim.DT)
+        self.pitch, self.rate = pitch_deg + self.bias, rate_dps
         self.x += self.wheel * sim.DT
-        self.ex = self.x - self.xref
-        if abs(self.ex) > SLIP:         # same as the firmware: past 9 cm the reference comes along
-            self.xref = self.x - math.copysign(SLIP, self.ex)
+        self.ex = self.x - r.xref
+        if abs(self.ex) > SLIP:
+            r.xref = self.x - math.copysign(SLIP, self.ex)
             self.ex = math.copysign(SLIP, self.ex)
-        a = self.action * A_MAX
-        self.wheel = max(-sim.P["motor"]["max_speed"], min(sim.P["motor"]["max_speed"], self.wheel + a * sim.DT))
+        self.wheel = max(-sim.P["motor"]["max_speed"], min(sim.P["motor"]["max_speed"],
+                                                           self.wheel + self.action * A_MAX * sim.DT))
+        self.turn_offset = math.radians(r.wr) * TRACK / 2      # firmware turn feedforward (stepper)
         return self.wheel
 
+    def frame(self):
+        r = self.ref
+        theta_ref = math.degrees(r.ar / 9.81)
+        return [(self.pitch - theta_ref) / 10, self.rate / 100, (self.wheel - r.vr) / 0.5, self.ex / 0.2,
+                r.vr / 0.5, r.ar / 1.0, r.wr / 45, self.action]
 
-def randomized_params(rng):
-    """A robot that is not quite ours: the policy has to work for all of them (and so, hopefully, for the real one)."""
+
+def randomized_params(rng, d):
     p = copy.deepcopy(sim.P)
-    p["body"]["pendulum_length_L"] *= rng.uniform(0.8, 1.2)
-    p["body"]["mass"] *= rng.uniform(0.9, 1.1)
-    p["motor"]["torque_limit"] = rng.uniform(0.2, 0.4)
-    p["floor_friction"] = rng.uniform(0.5, 1.0)
-    p["disturbance_torque"] = rng.uniform(0.0, 0.015)
+    p["body"]["pendulum_length_L"] *= rng.uniform(1 - 0.2 * d, 1 + 0.2 * d)
+    p["body"]["mass"] *= rng.uniform(1 - 0.1 * d, 1 + 0.1 * d)
+    p["motor"]["torque_limit"] = rng.uniform(0.3 - 0.1 * d, 0.3 + 0.1 * d)
+    p["floor_friction"] = rng.uniform(0.8 - 0.3 * d, 0.8 + 0.2 * d)
+    p["disturbance_torque"] = rng.uniform(0.0, 0.015 * max(d, 0.5))
     return p
 
 
 class BalanceEnv(gym.Env):
     metadata = {"render_modes": []}
+    SCENARIOS = ("still", "joystick", "moves", "mixed")
 
-    def __init__(self, randomize=True, pushes=True, bias=0.0):
-        self.randomize, self.pushes, self.bias = randomize, pushes, bias
-        self.observation_space = gym.spaces.Box(-np.inf, np.inf, (5,), np.float32)
+    def __init__(self, difficulty=1.0, scenario=None, randomize=True, bias=None, seed_robot=None):
+        self.difficulty = difficulty
+        self.scenario_fixed, self.randomize, self.bias_fixed = scenario, randomize, bias
+        self.observation_space = gym.spaces.Box(-10, 10, (HISTORY * FRAME,), np.float32)
         self.action_space = gym.spaces.Box(-1.0, 1.0, (1,), np.float32)
         self.sim = None
+        self.script = None           # eval: list of (t, callable(env)) events instead of random ones
+
+    def set_difficulty(self, d):     # called by the training callback (curriculum)
+        self.difficulty = float(d)
 
     def _obs(self):
-        c = self.ctrl
-        return np.array([c.pitch / 10, c.rate / 100, c.wheel / 0.5, c.ex / 0.2, c.action], np.float32)
+        return np.clip(np.concatenate(self.hist), -10, 10).astype(np.float32)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        rng = self.np_random
-        params = randomized_params(rng) if self.randomize else sim.P
-        # v2, after the first real test: setpoint error ±3° and sensor delay 1–3 ticks (5–15 ms)
-        self.ctrl = PolicyController(rng.uniform(-3, 3) if self.randomize else self.bias)
-        self.sim = sim.Sim(self.ctrl, gyro_noise=rng.uniform(0.1, 0.6) if self.randomize else 0.3,
-                           seed=int(rng.integers(1 << 31)), pitch0=rng.uniform(-3, 3), params=params,
-                           delay=int(rng.integers(1, 4)) if self.randomize else 1)
-        self.ctrl.pitch, self.ctrl.rate = self.sim.pitch, 0.0
+        rng, d = self.np_random, self.difficulty if self.randomize else 0.0
+        self.scenario = self.scenario_fixed or self.SCENARIOS[int(rng.integers(len(self.SCENARIOS)))]
+        params = randomized_params(rng, d) if self.randomize else sim.P
+        bias = self.bias_fixed if self.bias_fixed is not None else rng.uniform(-3, 3) * d
+        self.ctrl = PolicyController(bias)
+        self.sim = sim.Sim(self.ctrl, gyro_noise=rng.uniform(0.1, 0.3 + 0.3 * d) if self.randomize else 0.3,
+                           seed=int(rng.integers(1 << 31)), pitch0=rng.uniform(-3, 3) * max(d, 0.3), params=params,
+                           delay=int(rng.integers(1, 2 + round(2 * d))) if self.randomize else 1,
+                           act_delay=int(rng.integers(0, 1 + round(2 * d))) if self.randomize else 0,
+                           slope_deg=rng.uniform(-2, 2) * d if self.randomize else 0.0)
+        self.ctrl.pitch = self.sim.pitch + bias
+        self.bias_drift = rng.uniform(0, 0.3) * d       # °/s random walk of the setpoint error
+        self.next_cmd = 0.0
         self.steps = 0
+        self.hist = [self.ctrl.frame()] * HISTORY
         return self._obs(), {}
 
+    # --- random events of a "day of use" (scaled by difficulty)
+    def _events(self):
+        rng, d, c, t = self.np_random, self.difficulty, self.ctrl, self.steps * sim.DT
+        r = c.ref
+        if self.script is not None:
+            while self.script and self.script[0][0] <= t:
+                self.script.pop(0)[1](self)
+            return
+        if self.scenario in ("joystick", "mixed") and t >= self.next_cmd:
+            r.v_target = 0.0 if rng.random() < 0.25 else rng.uniform(-0.4, 0.4) * max(d, 0.25)
+            r.w_target = rng.uniform(-45, 45) * d if rng.random() < 0.4 else 0.0
+            self.next_cmd = t + rng.uniform(0.5, 3.0)
+        if self.scenario == "moves" and t >= self.next_cmd and r.move is None:
+            if rng.random() < 0.5:
+                r.start_move(rng.choice([-1, 1]) * rng.uniform(0.2, 0.6), c.x)
+                r.w_target = 0.0
+            else:
+                r.w_target = rng.choice([-45, 45]) * max(d, 0.3)     # turn in place for a while
+            self.next_cmd = t + rng.uniform(2.0, 4.0)
+        if self.scenario == "moves" and r.w_target and t >= self.next_cmd - 1.0:
+            r.w_target = 0.0
+        if rng.random() < d / 700:
+            self.sim.push(rng.uniform(-6, 6) * d, rng.uniform(0.05, 0.2))
+        if abs(c.wheel) > 0.05 and rng.random() < d / 300:           # grout only matters when rolling
+            self.sim.bump(rng.uniform(0.05, 0.25) * d, rng.uniform(0.02, 0.08))
+        c.bias += rng.normal(0, self.bias_drift * math.sqrt(sim.DT))
+        c.bias = max(-3.5, min(3.5, c.bias))
+
     def step(self, action):
-        self.ctrl.action = float(np.clip(action[0], -1, 1))
-        if self.pushes and self.np_random.random() < 1 / 700:     # v3: a push every ~3.5 s (v2: ~2 s, ±8 N: it fell
-            self.sim.push(self.np_random.uniform(-6, 6), self.np_random.uniform(0.05, 0.2))  # so often it gave up on position)
+        c = self.ctrl
+        c.prev_action, c.action = c.action, float(np.clip(action[0], -1, 1))
+        self._events()
         self.sim.step()
         self.steps += 1
-        c = self.ctrl
-        # the cost uses the TRUE tilt (not the biased reading): standing truly upright is what pays
-        cost = ((c.ex / W_X) ** 2 + (c.wheel / W_V) ** 2 + (self.sim.true_pitch() / W_TH) ** 2 + (c.rate / W_W) ** 2
-                + (c.action * A_MAX / W_A) ** 2)
+        self.hist = self.hist[1:] + [c.frame()]
+        r = c.ref
+        th = self.sim.true_pitch() - math.degrees(r.ar / 9.81)
+        cost = ((c.ex / W_X) ** 2 + ((c.wheel - r.vr) / W_V) ** 2 + (th / W_TH) ** 2 + (c.rate / W_W) ** 2
+                + (c.action * A_MAX / W_A) ** 2 + ((c.action - c.prev_action) * A_MAX / W_JERK) ** 2)
         fell = abs(self.sim.true_pitch()) > FALL_DEG
         reward = 1.0 - min(1.0, 0.05 * cost)
-        truncated = self.steps * sim.DT >= EPISODE_S
-        return self._obs(), reward, fell, truncated, {"x": self.sim.d.qpos[0]}
+        truncated = self.steps * sim.DT >= getattr(self, "max_s", EPISODE_S)
+        return self._obs(), reward, fell, truncated, {"x": self.sim.d.qpos[0], "y": self.sim.d.qpos[1]}
+
+
+def lqr_policy(env):
+    """The firmware LQR on the same observation (θref, reference, caps): the baseline every test compares against."""
+    c, r = env.ctrl, env.ctrl.ref
+    theta_ref = math.degrees(r.ar / 9.81)
+    a = 0.744 * (c.pitch - theta_ref) + 0.0707 * c.rate + max(-5, min(5, 27.67 * c.ex + 14.04 * (c.wheel - r.vr) + r.ar))
+    return np.array([max(-1, min(1, a / A_MAX))], np.float32)
 
 
 def _selftest():
     from gymnasium.utils.env_checker import check_env
-    env = BalanceEnv()
-    check_env(env, skip_render_check=True)
-    obs, _ = env.reset(seed=0)
-    total, n = 0.0, 0
-    while True:                                   # doing nothing: it must fall, and quickly
-        obs, r, term, trunc, _ = env.step(np.zeros(1, np.float32))
-        total, n = total + r, n + 1
+    check_env(BalanceEnv(), skip_render_check=True)
+    env = BalanceEnv(difficulty=0.0, scenario="still", randomize=False)
+    env.reset(seed=0)
+    n = 0
+    while True:
+        _, _, term, trunc, _ = env.step(np.zeros(1, np.float32))
+        n += 1
         if term or trunc:
             break
-    assert term and n * sim.DT < 3, f"zero action should fall fast (lasted {n * sim.DT:.1f} s)"
-    env = BalanceEnv(randomize=False, pushes=False)  # the LQR, written as a policy, must stand the whole episode
-    obs, _ = env.reset(seed=1)
-    for _ in range(int(EPISODE_S / sim.DT)):
-        c = env.ctrl
-        a = 0.744 * c.pitch + 0.0707 * c.rate + max(-5, min(5, 27.67 * c.ex + 14.04 * c.wheel))
-        obs, r, term, trunc, _ = env.step(np.array([np.clip(a / A_MAX, -1, 1)], np.float32))
-        assert not term, "LQR as a policy fell"
-        if trunc:
-            break
-    print(f"selftest ok (zero action falls in {n * sim.DT:.2f} s; LQR as a policy stands 10 s)")
+    assert term and n * sim.DT < 3, "zero action must fall"
+    for scen in BalanceEnv.SCENARIOS:          # the LQR must survive every scenario at full difficulty, mostly
+        ok = 0
+        for k in range(5):
+            env = BalanceEnv(difficulty=1.0, scenario=scen)
+            env.reset(seed=k)
+            while True:
+                _, _, term, trunc, _ = env.step(lqr_policy(env))
+                if term or trunc:
+                    break
+            ok += not term
+        print(f"  LQR survives '{scen}' at difficulty 1: {ok}/5")
+        assert ok >= 2, f"scenario '{scen}' too hard even for the LQR"
+    print("selftest ok")
 
 
 if __name__ == "__main__":

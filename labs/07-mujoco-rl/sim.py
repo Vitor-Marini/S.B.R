@@ -68,9 +68,13 @@ class FirmwareLQR:
 class Sim:
     """Physics at 1 ms, control at 5 ms with the firmware's complementary filter and a 1-tick sensor delay."""
 
-    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None, params=None, delay=1):
+    def __init__(self, controller, gyro_noise=0.3, seed=0, pitch0=0.0, disturbance=None, params=None, delay=1,
+                 act_delay=0, slope_deg=0.0):
         params = params or P                       # a different robot (domain randomization) or the real one
         self.m = mujoco.MjModel.from_xml_string(build_mjcf.build(params))
+        if slope_deg:                              # ramp along x = gravity tilted (simpler than a tilted floor)
+            s_ = math.radians(slope_deg)
+            self.m.opt.gravity[:] = [-G * math.sin(s_), 0, -G * math.cos(s_)]
         self.d = mujoco.MjData(self.m)
         if pitch0:
             q = np.zeros(4)
@@ -85,6 +89,8 @@ class Sim:
         self.sub = int(round(DT / self.m.opt.timestep))
         self.pitch = self.true_pitch()
         self.delayed = [(self.pitch, 0.0)] * delay      # sensor → controller, in control ticks
+        self.act_queue = [(0.0, 0.0)] * act_delay      # controller → wheels (driver/motor lag), in control ticks
+        self._bump = None
         self.t = 0.0
         self.body = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "robot")
 
@@ -103,11 +109,24 @@ class Sim:
     def push(self, newtons, seconds=0.1):
         self._push = (newtons, self.t + seconds)
 
+    def bump(self, torque, seconds):
+        """Tile grout: the wheels meet a resisting torque for a moment (and the stepper may not follow)."""
+        self._bump = (torque, self.t + seconds)
+
     def step(self):
         meas = self.delayed.pop(0)
         self.delayed.append(self.sensors())
         wheel = self.c.step(*meas)
-        self.d.ctrl[:] = wheel / R
+        turn = getattr(self.c, "turn_offset", 0.0)    # m/s per wheel, + = left (firmware: L = v − t, R = v + t)
+        self.act_queue.append((wheel - turn, wheel + turn))
+        left, right = self.act_queue.pop(0)
+        self.d.ctrl[:] = (left / R, right / R)
+        b = self._bump
+        if b and self.t < b[1]:
+            self.d.qfrc_applied[6:8] = -np.sign(self.d.qvel[6:8]) * b[0]
+        else:
+            self.d.qfrc_applied[6:8] = 0.0
+            self._bump = None
         f = getattr(self, "_push", None)
         self.d.xfrc_applied[self.body, 0] = f[0] if f and self.t < f[1] else 0.0
         self.d.xfrc_applied[self.body, 4] = self.rng.normal(0, self.dist) if self.dist else 0.0

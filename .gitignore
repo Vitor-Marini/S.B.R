@@ -11,3 +11,5 @@ __pycache__/
 *.pyc
 .venv/
 model/sbr.xml
+labs/07-mujoco-rl/models/ppo_v4_*M.zip
+!labs/07-mujoco-rl/models/ppo_v4_20M.zip

@@ -117,6 +117,42 @@ pushes, stronger position weight) holds its place like the LQR.
 table 2.2 ms; in **fixed point** (Q12 int16 weights, int32 sums, hardware multiply) **103 µs**. `export.py` checks
 the C against PyTorch (max error ~1e-3).
 
+## Step 4: v4 — "a day of use" (`env.py` v4, `train.py`)
+
+Second floor test (v3): it drove 4 m at 0.4 m/s with turns — never trained to drive — but jerked at every joystick
+change and, after a push, fell into the same ±4 m/s² bang-bang oscillation as v1. v4 trains everything the robot lives:
+
+| | |
+|---|---|
+| scenarios | still · joystick driver (speed steps to ±0.4 m/s, reversals, stops, turns) · move/turn · mixed |
+| world | pushes, tile grout (wheels resisted 20–80 ms), slope ±2°, drifting setpoint error ±3°, sensor delay 5–15 ms, wheel lag 0–10 ms, robot randomization |
+| observation | 3 frames × 8: tilt − θref, rate, v − v_ref, position error, v_ref, a_ref, turn command, last action |
+| reward | LQR-style cost around the reference + **jerk** (Δaction) |
+| curriculum | difficulty 0.2 → 1 over the first 60 % |
+| network / run | 2×64, 30M steps, 32 processes (7.7k steps/s), 58 min |
+
+Test battery (copies the real tests; the LQR is the bar):
+
+| test | LQR | v4 20M (best) | v4 30M |
+|---|---|---|---|
+| still | ±0.7 cm ±0.43° | ±0.9 cm **±1.56°** | ±1.3 cm ±1.58° |
+| still, setpoint +2.75° | ±0.7 cm ±0.43° | ±0.9 cm ±1.57° | ±1.0 cm ±1.57° |
+| joystick drive (real test) | max tilt 9.4° | 9.4° | 9.2° |
+| demo | 9.6 cm off | 10.4 cm | 9.3 cm |
+| push ladder | 6 N | 6 N | 6 N |
+| grout at 0.3 m/s | max tilt 9.0° | 9.6° | 9.0° |
+| 50 random robots | **32/50** | 27/50 | 18/50 |
+
+**Not good enough for the robot yet:** it ties the LQR on driving, the demo, pushes and grout, but its body shakes
+~4× more standing (±1.6° vs ±0.4°) and it survives fewer random robots. Training reward kept falling once difficulty
+hit 1 (episodes ~9 of 15 s): the full world is too hard to keep improving in, and later checkpoints got worse.
+
+Suspected causes, to fix before training again:
+1. **Clipped reward:** `1 − min(1, 0.05·cost)` is flat at 0 whenever cost > 20 — in hard moments (exactly when it
+   matters) the network gets no signal about doing *less* badly. Use a smooth shape, e.g. `exp(−cost/20)`.
+2. **Difficulty 1 is beyond the LQR itself** (32/50): cap the curriculum where the LQR still survives most episodes.
+3. **Shaking:** tilt is weighted loosely (8°) next to everything else; jitter isn't penalized directly.
+
 ## Next
 
 1. ✅ Gymnasium environment with domain randomization. 2. ✅ PPO, compared with LQR.
