@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Train on the GPU with Isaac Lab's PPO (rsl_rl), thousands of robots at once.
 
-    python labs/08-isaac-lab/train.py [steps]            → v9 residual, high-passed (default 300M), checkpoints in
-                                                           logs/sbr_v9/, exports models/ppo_v9_isaac_<it>.npz, scores
-                                                           them all (v7 = commit f8bc142, v8 = d191aa8)
+    python labs/08-isaac-lab/train.py [steps]            → v10 residual, high-passed, ±8 N pushes (default 300M),
+                                                           checkpoints in logs/sbr_v10/, exports
+                                                           models/ppo_v10_isaac_<it>.npz, scores them all
+                                                           (v7 = commit f8bc142, v8 = d191aa8, v9 = cc95cf0)
     python labs/08-isaac-lab/train.py [steps] --v6       → v6 (network alone, critic = actor inputs)
     python labs/08-isaac-lab/train.py export model.pt    → .pt checkpoint → .npz (weights for lab 07's battery and
                                                            export.py)
@@ -30,7 +31,7 @@ D_MAX = 0.8                   # same curriculum as lab 07 v5/v6: 0.2 → 0.8 ove
 RESIDUAL = 0.25               # v7: correction up to ±0.25 × 4 = ±1 m/s² on top of the LQR
 
 
-def runner_cfg(iterations, name="sbr_v9", residual=True):
+def runner_cfg(iterations, name="sbr_v10", residual=True):
     from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
     cfg = RslRlOnPolicyRunnerCfg(
         num_steps_per_env=STEPS_PER_ENV, max_iterations=iterations, save_interval=max(1, iterations // 12),
@@ -67,10 +68,10 @@ def export(pt, out, residual=0.0):
 def train(steps, w_th=None, residual=RESIDUAL):
     import sbr_env as S
     from rsl_rl.runners import OnPolicyRunner
-    name = "sbr_v9" if residual else "sbr_v6"
+    name = "sbr_v10" if residual else "sbr_v6"
     iterations = int(steps / (N_ENVS * STEPS_PER_ENV))
     env = S.SbrEnv(num_envs=N_ENVS, curriculum_ticks=int(0.6 * steps / N_ENVS), d_max=D_MAX, residual=residual,
-                   hp_tau=S.HP_TAU if residual else 0.0,
+                   hp_tau=S.HP_TAU if residual else 0.0, push_n=S.PUSH_N if residual else 0.0,
                    **({"w_th": w_th} if w_th else {}))
     log_dir = os.path.join(HERE, "logs", name, time.strftime("%Y-%m-%d_%H-%M-%S"))
     runner = OnPolicyRunner(env, runner_cfg(iterations, name, bool(residual)), log_dir=log_dir, device="cuda:0")

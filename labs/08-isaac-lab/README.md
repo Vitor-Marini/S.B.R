@@ -229,8 +229,30 @@ reflex (standing, the LQR saturates for nothing; here it saturates for real) can
 never had to learn the difference for a push this big: training pushes are `±6 N × difficulty`, at most **±4.8 N** with
 the curriculum's d_max 0.8 — the 6 N rung of the battery is outside what it ever saw.
 
+## Step 7: v10 = v9 + training pushes up to ±8 N
+
+One line: training pushes up to ±8 N at any difficulty (score and selftest keep ±6 N × d, so numbers stay comparable).
+Training took 22.6 min (more falls → more resets). GPU score: survival 84–86 % (LQR 85.4 %), creep ≤ 0.6 cm.
+
+| test | LQR | v10 it 254 | v10 it 508 | v10 it 1270 |
+|---|---|---|---|---|
+| standing wobble | ±0.42°, 20 Hz, 45 % sat. | ±0.37°, 6 % | **±0.13°, 0 %** | ±1.00°, 23 % |
+| still | ±0.7 cm ±0.43° | ±0.7 cm ±0.37° | ±0.6 cm **±0.14°** | ±5.1 cm ±1.06° |
+| still, setpoint +2.75° | ±0.7 cm | ±0.6 cm | ±0.7 cm | ±0.7 cm |
+| joystick drive | 9.4° | 9.6° | 9.3° | 11.8° |
+| demo | 9.6 cm off | 9.6 cm | 9.5 cm | 10.2 cm |
+| push ladder | 6 N | **6 N** | 4 N | 4 N |
+| grout at 0.3 m/s | 9.0° | 8.6° | 8.4° | 8.9° |
+| 50 random robots (diff 1.0) | 32/50 | 30/50 | **32/50** | 24/50 |
+| 50 random robots (diff 0.8) | 43/50 | 40/50 | 40/50 | 36/50 |
+
+Closest to the rule so far. **it 254** is the first learned policy that holds the 6 N push and ties the LQR on still,
+setpoint and demo — but its gain is small (6 % saturated instead of 45 %, ±0.37°). **it 508** has the big gain
+(standing ±0.14°, 0 % saturated, ties 32/50 random robots) but drops back to 4 N. The "50 random robots" lines are
+3 robots apart, within the noise of 50 samples (±2.5); on the GPU score with 4096 robots both survive as often as the
+LQR. Late checkpoints get worse again (it 1270 sways ±1°).
+
 ## Next
 
-- v10: training pushes up to ±8 N regardless of the difficulty curriculum (one line), so it learns not to pull back on
-  a real push; same battery, same rule.
+- Decide between it 254 (passes the push, small gain) and a v11 that keeps it 508's gain with the 6 N push.
 - If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).

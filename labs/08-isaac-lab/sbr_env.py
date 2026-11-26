@@ -16,6 +16,7 @@ so in v7 creeping 47 cm cost the same as 9 cm — the one battery line v7 failed
 v9 = v7 + high-passed correction (correction − its low-pass, HP_TAU): measured, v7/v8 learned a constant +1 m/s² that,
 with a setpoint error, eats the LQR's position hold and makes it creep. A high-passed correction has zero long-run
 mean, so standing still it is exactly the LQR; the fast part (the chatter cancellation) passes.
+v10 = v9 + pushes up to ±8 N (PUSH_N) in training.
 
     python labs/08-isaac-lab/sbr_env.py     → selftest: LQR survives, zero action falls, speed
 """
@@ -47,6 +48,8 @@ W_TH_START, W_TH_END = 4.0, 0.5   # v6: tilt weight tightened 4° (v5) → 0.5°
                                   # only learns 'use less action' and falls (measured: 0.3 s episodes after 300M)
 COST_SCALE = 40.0
 HP_TAU = 0.5                 # v9: s, high-pass time constant of the network correction
+PUSH_N = 8.0                 # v10: training pushes up to ±8 N at any difficulty (±6 N × d ≤ 4.8 N before:
+                             # the battery's 6 N rung was never seen, and the correction pulled against the LQR there)
 PHYS_EVERY = 20             # ticks between batched physics randomizations (see _refresh_physics)
 RING = 4                     # delay buffers: sensor delay 1–3 ticks, actuator 0–2
 NQ, NDOF, NBODY = 9, 8, 3    # per robot: free joint (7) + 2 wheels; bodies: body, wheel_left, wheel_right
@@ -61,12 +64,13 @@ def rotate_inv(q, v):
 
 class SbrEnv:
     def __init__(self, num_envs=4096, device="cuda:0", seed=0, difficulty=0.2, curriculum_ticks=0, d_max=0.8,
-                 w_th=(W_TH_START, W_TH_END), residual=0.0, hp_tau=0.0):
+                 w_th=(W_TH_START, W_TH_END), residual=0.0, hp_tau=0.0, push_n=0.0):
         self.num_envs, self.num_actions, self.device = num_envs, 1, device
         self.max_episode_length = int(EPISODE_S / DT)
         self.cfg = {}
         self.difficulty, self.curriculum_ticks, self.d_max, self.ticks = difficulty, curriculum_ticks, d_max, 0
         self.w_th_range, self.residual, self.hp_tau = w_th, residual, hp_tau        # hp_tau 0 = v7 (no high-pass)
+        self.push_n = push_n                     # 0: pushes ±6 N × difficulty (v6–v9, and the score/selftest)
         self.w_th = w_th[0] if curriculum_ticks else w_th[1]
         self.g = torch.Generator(device=device).manual_seed(seed)
         self._build_world()
@@ -249,7 +253,7 @@ class SbrEnv:
         stop = (self.scenario == 2) & (self.w_target != 0) & (t >= self.next_cmd - 1)
         self.w_target = torch.where(stop, 0.0, self.w_target)
         push = rnd() < d / 700
-        self.push_f = torch.where(push, (rnd() * 12 - 6) * d, self.push_f)
+        self.push_f = torch.where(push, (rnd() * 2 - 1) * (self.push_n or 6 * d), self.push_f)
         self.push_until = torch.where(push, t + 0.05 + 0.15 * rnd(), self.push_until)
         bump = (self.wheel.abs() > 0.05) & (rnd() < d / 300)
         self.bump_tq = torch.where(bump, (0.05 + 0.2 * rnd()) * d, self.bump_tq)
