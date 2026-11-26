@@ -15,3 +15,7 @@ labs/07-mujoco-rl/models/ppo_v4_*M.zip
 !labs/07-mujoco-rl/models/ppo_v4_20M.zip
 labs/07-mujoco-rl/models/ppo_v5_*M.zip
 model/sbr.usda
+labs/08-isaac-lab/logs/
+labs/08-isaac-lab/models/*.npz
+!labs/08-isaac-lab/models/ppo_v6_isaac_1016.npz
+!labs/08-isaac-lab/models/ppo_v6_isaac_1524.npz

@@ -3,7 +3,7 @@
 > **In one sentence:** the same robot as lab 07, but simulated thousands at a time on the RTX 4060 Ti — to see what
 > GPU-parallel training changes compared with MuJoCo on the CPU.
 
-**Status:** 🟡 steps 1–2 done: the model matches the real robot and lab 07 with the firmware LQR. Next: train.
+**Status:** 🟡 steps 1–3 done: model validated, v6 trained on the GPU (300M steps, 15 min) — better than v4/v5 standing, still not the LQR.
 
 ## Where it runs
 
@@ -76,6 +76,49 @@ python labs/08-isaac-lab/validate.py          # report (~2.5 min)
 python labs/08-isaac-lab/validate.py --viz    # watch the 18 robots
 ```
 
+## Step 3: v6 trained on the GPU (`sbr_env.py`, `train.py`, `eval_in_mujoco.py`)
+
+`sbr_env.py` is lab 07's v5 environment (scenarios, events, randomization, delays, firmware reference generator,
+complementary filter, 24-input observation) as tensors over 8192 robots, physics batched per robot (mass, L, torque,
+friction) and the 5 physics substeps recorded in a CUDA graph. The LQR survives it like in MuJoCo (86 % at
+difficulty 0.8 vs 88 %). PPO from Isaac Lab (rsl_rl), same 2×64 tanh network as lab 07.
+
+| | lab 07 (MuJoCo, CPU) | lab 08 (Newton, GPU) |
+|---|---|---|
+| speed (env + PPO) | 7.7k steps/s | **~330k steps/s** |
+| run | v5: 30M steps, 62 min | **v6: 300M steps, 15 min** |
+
+**First v6 attempt failed:** with the tilt weight at 0.5° from the start, any tilt > 3° saturates the state cost; a
+robot that can't balance yet only gets "use less action" → action noise collapsed to 0, 0.3 s episodes. Fix: a
+curriculum on the weight too, 4° → 0.5° with the difficulty (20M-step tests: 0.5° fixed 0.19 s episodes, 4° → 0.5°
+6.0 s).
+
+**Judged in MuJoCo, on lab 07's battery** (a policy trained in Newton, tested in another simulator: it transfers):
+
+| standing | tilt | peak | action saturated |
+|---|---|---|---|
+| LQR | ±0.42° | 20 Hz | 45 % |
+| v4 (lab 07) | ±1.56° | 8.6 Hz | 97 % |
+| v5 (lab 07) | ±2.35° | 1.5 Hz | 9 % |
+| v6 it 254 → 1524 | ±2.31° → **±1.03°** | 3.9 → 9.2 Hz | 26 → 32 % |
+
+| test | LQR | v6 it 1016 | v6 it 1524 (final) |
+|---|---|---|---|
+| still | ±0.7 cm ±0.43° | ±0.9 cm ±1.20° | ±0.9 cm ±1.04° |
+| still, setpoint +2.75° | ±0.7 cm | **drives away (±6 m)** | **FELL** |
+| joystick drive | max tilt 9.4° | **7.3°** | **6.4°** |
+| demo | 9.6 cm off | 11.5 cm | 20.1 cm |
+| push ladder | 6 N | 6 N | 4 N |
+| grout at 0.3 m/s | 9.0° | 8.7° | **4.6°** |
+| 50 random robots (diff 1.0) | 32/50 | 27/50 | 22/50 |
+| 50 random robots (diff 0.8) | 43/50 | 31/50 | 33/50 |
+
+Tightening the tilt weight worked as intended — standing wobble went from v5's lazy ±2.3° to ±1.0°, and v6 drives
+and rolls over grout with **less** tilt than the LQR — but it is creeping back toward chatter (9 Hz, 32 %
+saturated) and lost robustness: a constant +2.75° setpoint error (the real gyro-zero transient that broke v1) makes
+it drive away or fall, and it survives fewer random robots. Not for the robot yet.
+
+## Next
 ## Next
 
 3. Train with thousands of robots in parallel; compare with v3/v4/v5.
