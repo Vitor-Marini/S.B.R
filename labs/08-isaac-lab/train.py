@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Train on the GPU with Isaac Lab's PPO (rsl_rl), thousands of robots at once.
 
-    python labs/08-isaac-lab/train.py [steps]            → v10 residual, high-passed, ±8 N pushes (default 300M),
-                                                           checkpoints in logs/sbr_v10/, exports
-                                                           models/ppo_v10_isaac_<it>.npz, scores them all
-                                                           (v7 = commit f8bc142, v8 = d191aa8, v9 = cc95cf0)
+    python labs/08-isaac-lab/train.py [steps]            → v11 = v10 + 30 checkpoints, score has the 6 N push
+                                                           (default 300M), logs/sbr_v11/, models/ppo_v11_isaac_<it>.npz
+                                                           (v7 = f8bc142, v8 = d191aa8, v9 = cc95cf0, v10 = bad073e)
     python labs/08-isaac-lab/train.py [steps] --v6       → v6 (network alone, critic = actor inputs)
     python labs/08-isaac-lab/train.py export model.pt    → .pt checkpoint → .npz (weights for lab 07's battery and
                                                            export.py)
@@ -31,10 +30,10 @@ D_MAX = 0.8                   # same curriculum as lab 07 v5/v6: 0.2 → 0.8 ove
 RESIDUAL = 0.25               # v7: correction up to ±0.25 × 4 = ±1 m/s² on top of the LQR
 
 
-def runner_cfg(iterations, name="sbr_v10", residual=True):
+def runner_cfg(iterations, name="sbr_v11", residual=True):
     from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
     cfg = RslRlOnPolicyRunnerCfg(
-        num_steps_per_env=STEPS_PER_ENV, max_iterations=iterations, save_interval=max(1, iterations // 12),
+        num_steps_per_env=STEPS_PER_ENV, max_iterations=iterations, save_interval=max(1, iterations // 30),   # v11: dense — the best ones are mid-training
         experiment_name=name,
         actor=RslRlMLPModelCfg(hidden_dims=[64, 64], activation="tanh", obs_normalization=False,
                                distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=0.5 if residual else 1.0)),
@@ -68,7 +67,7 @@ def export(pt, out, residual=0.0):
 def train(steps, w_th=None, residual=RESIDUAL):
     import sbr_env as S
     from rsl_rl.runners import OnPolicyRunner
-    name = "sbr_v10" if residual else "sbr_v6"
+    name = "sbr_v11" if residual else "sbr_v6"
     iterations = int(steps / (N_ENVS * STEPS_PER_ENV))
     env = S.SbrEnv(num_envs=N_ENVS, curriculum_ticks=int(0.6 * steps / N_ENVS), d_max=D_MAX, residual=residual,
                    hp_tau=S.HP_TAU if residual else 0.0, push_n=S.PUSH_N if residual else 0.0,
@@ -125,8 +124,19 @@ def score(paths, n=4096, d=0.8, seconds=10.0, seed=123):
             if k == int(3 / S.DT):
                 x0 = env.x.clone()
         creep = (env.x - x0).abs().median().item() * 100
+        pushes = []                            # battery's push ladder, 256 tries per rung (one try is a coin flip)
+        for N in (6.0, 6.5, 7.0):
+            env = S.SbrEnv(num_envs=256, difficulty=0.0, seed=seed, residual=res, hp_tau=tau)
+            env.scenario[:], env.push_f[:] = 0, N
+            ok = torch.ones(256, dtype=torch.bool, device=env.device)
+            for k in range(int(4 / S.DT)):
+                if k == int(1 / S.DT):
+                    env.push_until[:] = env.episode_length_buf * S.DT + 0.1   # N newtons for 0.1 s, as sim.push
+                _, _, done, ex = env.step(act(env))
+                ok &= ~(done & ~ex["time_outs"])
+            pushes.append(f"{N:g}N {ok.float().mean().item() * 100:.0f}%")
         print(f"{label:28} survive {alive.float().mean().item() * 100:5.1f}%  tilt rms {math.sqrt(tilt / ticks):.2f}°  "
-              f"jerk rms {math.sqrt(jerk / ticks):.2f} m/s²/tick  drift rms {math.sqrt(drift / ticks) * 100:.1f} cm  sp+2.75° creep {creep:.1f} cm", flush=True)
+              f"jerk rms {math.sqrt(jerk / ticks):.2f} m/s²/tick  drift rms {math.sqrt(drift / ticks) * 100:.1f} cm  sp+2.75° creep {creep:.1f} cm  push {' '.join(pushes)}", flush=True)
         del env
 
 

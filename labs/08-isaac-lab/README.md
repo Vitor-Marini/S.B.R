@@ -252,7 +252,35 @@ setpoint and demo — but its gain is small (6 % saturated instead of 45 %, ±0.
 3 robots apart, within the noise of 50 samples (±2.5); on the GPU score with 4096 robots both survive as often as the
 LQR. Late checkpoints get worse again (it 1270 sways ±1°).
 
+## Step 8: v11 — first policy that ties or beats the LQR on every line
+
+**First, the battery itself was too noisy to judge pushes.** Repeating lab 07's push rung with 20 noise seeds instead
+of one: the LQR survives 6 N only **5/20** — "LQR holds 6 N" was one lucky try. `train.py score` now runs 256 tries per
+push (6, 6.5, 7 N) on the GPU.
+
+v11 = v10's training with 30 checkpoints instead of 13 (the good ones are mid-training) and the better push score.
+Mid checkpoints (it 100–450) hold 6 N in 100 % of 256 tries on the GPU (LQR 73 %).
+
+| test | LQR | **v11 it 150** | v11 it 400 |
+|---|---|---|---|
+| standing wobble | ±0.42°, 20 Hz, 45 % saturated | **±0.12°, 0 %** | ±0.21°, 0 % |
+| still | ±0.7 cm ±0.43° | ±0.6 cm **±0.14°** | ±0.6 cm ±0.22° |
+| still, setpoint +2.75° | ±0.7 cm ±0.43° | ±0.6 cm ±0.34° | ±0.6 cm ±0.36° |
+| joystick drive | 9.4° | 9.5° | 9.5° |
+| demo | 9.6 cm off | 9.6 cm | 10.1 cm |
+| push 6 N, 20 tries | 5/20 | **19/20** | 19/20 |
+| grout at 0.3 m/s | 9.0° | **8.5°** | 8.4° |
+| **200** random robots (diff 1.0) | 118/200 | 117/200 | — |
+| **200** random robots (diff 0.8) | 159/200 | 160/200 | — |
+
+(With 50 robots it was 40 vs 43 — noise; with 200 they tie.) **v11 it 150 ties the LQR everywhere and is 3× steadier
+standing, holds 6 N pushes 19/20 instead of 5/20 and tilts less on grout.** First candidate for the real robot.
+
+What got there, v6 → v11: residual on top of the LQR, privileged critic, effort cost on the correction only, the
+correction high-passed (no creep), pushes up to 8 N in training, dense checkpoints — and a battery that measures with
+enough tries. Each step was found by measuring why the previous one failed, not by tuning weights.
+
 ## Next
 
-- Decide between it 254 (passes the push, small gain) and a v11 that keeps it 508's gain with the 6 N push.
+- Port v11 it 150 to the firmware: 24 inputs, LQR + correction, high-pass (one float); test on the stand, then on the floor.
 - If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).
