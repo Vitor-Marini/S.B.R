@@ -215,8 +215,22 @@ The creep is gone (v7/v8: 27–47 cm) and it 762 keeps the chatter win (0 % satu
 the demo ends 1.4 cm farther and joystick tilt is 0.3° higher. Late checkpoints get worse (it 1524 sways ±1°): the
 mid-training ones are the ones to keep. Not for the robot yet.
 
+**Why pushes drop to 4 N — measured** (v9 it 762, MuJoCo, 6 N for 0.1 s; the LQR alone survives it):
+
+| after the push | tilt | LQR asks | correction | sent |
+|---|---|---|---|---|
+| 40 ms | +1.8° | +4.00 (saturated) | **−0.93** | +3.07 |
+| 80 ms | +5.0° | +4.00 | **−0.55** | +3.45 |
+| 120 ms | +10.2° | +4.00 | **−0.31** | +3.69 |
+| 140 ms → | 12–24° | +4.00 | 0 | +4.00 — too late, falls |
+
+For the first ~120 ms the correction **pulls back exactly when the LQR needs all 4 m/s²** — the chatter-cancelling
+reflex (standing, the LQR saturates for nothing; here it saturates for real) can't tell the two apart in time. And it
+never had to learn the difference for a push this big: training pushes are `±6 N × difficulty`, at most **±4.8 N** with
+the curriculum's d_max 0.8 — the 6 N rung of the battery is outside what it ever saw.
+
 ## Next
 
-- v10: find why pushes drop to 4 N (log the correction during the 6 N push in MuJoCo: does it fight the LQR's
-  recovery?) — the same measure-first approach that found v7's creep.
+- v10: training pushes up to ±8 N regardless of the difficulty curriculum (one line), so it learns not to pull back on
+  a real push; same battery, same rule.
 - If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).
