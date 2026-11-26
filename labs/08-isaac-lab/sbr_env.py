@@ -8,6 +8,9 @@ reward. Observation and action are identical to v5 (24 inputs, wheel acceleratio
 runs in lab 07's battery — and on the same firmware path.
 
 v6 = v5 with W_TH 4° → 0.5° (lab 07, step 5: v5 learned a lazy 1.5 Hz ±2.3° sway because tilt was too cheap).
+v7 (residual=0.25): action = firmware LQR + network × ±1 m/s². The robot starts as the LQR and the network only learns
+corrections; the effort penalty applies to the correction only (the LQR itself is saturated 45 % of the time). The
+critic also sees what the robot can't (true tilt, setpoint error, the randomized physics): the "critic" obs group.
 
     python labs/08-isaac-lab/sbr_env.py     → selftest: LQR survives, zero action falls, speed
 """
@@ -52,12 +55,12 @@ def rotate_inv(q, v):
 
 class SbrEnv:
     def __init__(self, num_envs=4096, device="cuda:0", seed=0, difficulty=0.2, curriculum_ticks=0, d_max=0.8,
-                 w_th=(W_TH_START, W_TH_END)):
+                 w_th=(W_TH_START, W_TH_END), residual=0.0):
         self.num_envs, self.num_actions, self.device = num_envs, 1, device
         self.max_episode_length = int(EPISODE_S / DT)
         self.cfg = {}
         self.difficulty, self.curriculum_ticks, self.d_max, self.ticks = difficulty, curriculum_ticks, d_max, 0
-        self.w_th_range = w_th
+        self.w_th_range, self.residual = w_th, residual
         self.w_th = w_th[0] if curriculum_ticks else w_th[1]
         self.g = torch.Generator(device=device).manual_seed(seed)
         self._build_world()
@@ -66,7 +69,7 @@ class SbrEnv:
         # controller / reference state (lab 07: PolicyController + Reference)
         for k in ("wheel", "x", "ex", "action", "prev_action", "bias", "bias_drift", "filt", "pitch_m", "rate_m",
                   "v_target", "w_target", "vr", "ar", "xref", "wr", "goal", "x0", "p", "v", "next_cmd",
-                  "push_f", "push_until", "bump_tq", "bump_until", "noise", "dist", "slope", "mass_scale"):
+                  "push_f", "push_until", "bump_tq", "bump_until", "noise", "dist", "slope", "mass_scale", "l_scale", "res"):
             setattr(self, k, z(n))
         self.scenario = torch.zeros(n, dtype=torch.long, device=device)   # 0 still, 1 joystick, 2 moves, 3 mixed
         self.delay = torch.ones(n, dtype=torch.long, device=device)
@@ -151,7 +154,7 @@ class SbrEnv:
         I[:, 0, 0], I[:, 1, 1], I[:, 2, 2] = ixx, iyy, izz
         self.mass[ids, 0], self.inv_mass[ids, 0] = mass, 1 / mass
         self.inertia[ids, 0], self.inv_inertia[ids, 0] = I, torch.linalg.inv(I)
-        self.mass_scale[ids] = ms
+        self.mass_scale[ids], self.l_scale[ids] = ms, L / b["pendulum_length_L"]
         self.effort[ids, 6] = self.effort[ids, 7] = u(0.3 - 0.1 * d, 0.3 + 0.1 * d)
         self.mu[ids] = u(0.8 - 0.3 * d, 0.8 + 0.2 * d)[:, None]
         self.solver.notify_model_changed(newton.ModelFlags.BODY_INERTIAL_PROPERTIES
@@ -186,7 +189,7 @@ class SbrEnv:
         newton.eval_fk(self.m, self.s0.joint_q, self.s0.joint_qd, self.s0, mask=self.reset_mask_wp)
         self.vprev[ids] = 0.0
         for k in ("wheel", "x", "ex", "action", "prev_action", "v_target", "w_target", "vr", "ar", "xref", "wr",
-                  "goal", "x0", "p", "v", "next_cmd", "push_f", "push_until", "bump_tq", "bump_until", "rate_m"):
+                  "goal", "x0", "p", "v", "next_cmd", "push_f", "push_until", "bump_tq", "bump_until", "rate_m", "res"):
             getattr(self, k)[ids] = 0.0
         self.filt[ids] = pitch0
         self.pitch_m[ids] = pitch0 + self.bias[ids]
@@ -204,7 +207,19 @@ class SbrEnv:
     def get_observations(self):
         from tensordict import TensorDict
         obs = self.hist.reshape(self.num_envs, -1).clamp(-10, 10)
-        return TensorDict({"policy": obs}, batch_size=[self.num_envs])
+        return TensorDict({"policy": obs, "critic": self._privileged()}, batch_size=[self.num_envs])
+
+    def _privileged(self):
+        """Training-only truth for the critic (never on the robot): tilt, rate, setpoint error, physics, events."""
+        t = self.episode_length_buf * DT
+        q, w = self.bq[:, 0, 3:], self.bqd[:, 0, 3:]
+        return torch.stack([(self.true_pitch() - torch.rad2deg(self.ar / G)) / 10,
+                            torch.rad2deg(rotate_inv(q, w)[:, 1]) / 100, self.bias / 3, torch.rad2deg(self.slope) / 2,
+                            (self.mass_scale - 1) * 10, (self.l_scale - 1) * 5, (self.effort[:, 6] - 0.3) * 10,
+                            (self.mu[:, 0] - 0.8) * 5, self.dist / 0.015,
+                            torch.where(t < self.push_until, self.push_f, 0.0) / 6,
+                            torch.where(t < self.bump_until, self.bump_tq, 0.0) / 0.25,
+                            torch.full_like(t, self.difficulty)], 1).clamp(-10, 10)
 
     # ---------------------------------------------------------------- one control tick (5 ms)
     def _events(self):
@@ -259,6 +274,10 @@ class SbrEnv:
     def step(self, actions):
         n, ar = self.num_envs, self.ar_idx
         a = actions.reshape(n).clamp(-1, 1)
+        prev_res = self.res
+        if self.residual:                       # v7: LQR on the same observation + bounded correction
+            self.res = a * self.residual
+            a = (lqr_from_obs(self.hist.reshape(n, -1).clamp(-10, 10)) + self.res).clamp(-1, 1)
         self.prev_action, self.action = self.action, a
         self._events()
         # sensors from the current state: gyro + accelerometer → firmware complementary filter
@@ -310,7 +329,10 @@ class SbrEnv:
         th = pitch - torch.rad2deg(self.ar / G)
         state = ((self.ex / W_X) ** 2 + ((self.wheel - self.vr) / W_V) ** 2 + (th / self.w_th) ** 2
                  + (self.rate_m / W_W) ** 2)
-        effort = (a * A_MAX / W_A) ** 2 + ((a - self.prev_action) * A_MAX / W_JERK) ** 2
+        if self.residual:
+            effort = (self.res * A_MAX / W_A) ** 2 + ((self.res - prev_res) * A_MAX / W_JERK) ** 2
+        else:
+            effort = (a * A_MAX / W_A) ** 2 + ((a - self.prev_action) * A_MAX / W_JERK) ** 2
         rew = 1.0 - (state / COST_SCALE).clamp(max=1.0) - effort / COST_SCALE
         fell = pitch.abs() > FALL_DEG
         timeout = self.episode_length_buf >= self.max_episode_length
@@ -322,12 +344,18 @@ class SbrEnv:
         return self.get_observations(), rew, done, extras
 
 
+def lqr_from_obs(o):
+    """The firmware LQR (lab 07 lqr_policy) read off the newest observation frame; torch or numpy, (..., 24) → (...)."""
+    f = o[..., -FRAME:]       # (pitch − θref)/10, rate/100, (wheel − vr)/0.5, ex/0.2, vr/0.5, ar, wr/45, action
+    a = 7.44 * f[..., 0] + 7.07 * f[..., 1] + (5.534 * f[..., 3] + 7.02 * f[..., 2] + f[..., 5]).clip(-5, 5)
+    return (a / A_MAX).clip(-1, 1)
+
+
 def lqr_actions(env):
-    """The firmware LQR on the same observation (lab 07 lqr_policy), as a batched action."""
-    theta_ref = torch.rad2deg(env.ar / G)
-    a = (0.744 * (env.pitch_m - theta_ref) + 0.0707 * env.rate_m
-         + (27.67 * env.ex + 14.04 * (env.wheel - env.vr) + env.ar).clamp(-5, 5))
-    return (a / A_MAX).clamp(-1, 1)[:, None]
+    """The firmware LQR as a batched action (plain env); in a residual env the LQR is already inside: send zeros."""
+    if env.residual:
+        return torch.zeros(env.num_envs, 1, device=env.device)
+    return lqr_from_obs(env.get_observations()["policy"])[:, None]
 
 
 def _selftest():
@@ -352,6 +380,13 @@ def _selftest():
         if fallen.all():
             break
     assert fallen.all(), "zero action must fall"
+    env = SbrEnv(num_envs=1024, difficulty=0.8, seed=1, residual=0.25)        # residual + zero net = the LQR
+    alive = torch.ones(1024, dtype=torch.bool, device=env.device)
+    for _ in range(int(10 / DT)):
+        _, _, done, ex = env.step(lqr_actions(env))
+        alive &= ~(done & ~ex["time_outs"])
+    print(f"residual env, zero correction: survives in {alive.float().mean() * 100:.0f}%")
+    assert alive.float().mean() > 0.7 and env.get_observations()["critic"].shape == (1024, 12)
     print("selftest ok")
 
 

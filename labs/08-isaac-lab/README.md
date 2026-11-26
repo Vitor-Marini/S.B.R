@@ -118,7 +118,55 @@ and rolls over grout with **less** tilt than the LQR — but it is creeping back
 saturated) and lost robustness: a constant +2.75° setpoint error (the real gyro-zero transient that broke v1) makes
 it drive away or fall, and it survives fewer random robots. Not for the robot yet.
 
-## Next
+## Step 4: v7 residual (LQR + network)
+
+v4 → v5 → v6 each fixed one weight and broke something else, so v7 changes the setup instead of the weights:
+
+- **action = firmware LQR + network × ±1 m/s²** — the robot starts as the LQR (zero correction = same 86 % survival
+  as the LQR in the selftest), the network only learns corrections;
+- **privileged critic** — during training the critic also sees 12 true values (real tilt, setpoint error, mass, L,
+  torque, friction, pushes, grout); the actor (what goes to the ESP) keeps the 24 real inputs;
+- **effort penalty on the correction only** (the LQR itself is saturated 45 % of the time);
+- **checkpoint chosen by a short GPU battery** (`train.py score`: the same 4096 robots, difficulty 0.8, 10 s).
+
+```bash
+python labs/08-isaac-lab/train.py 300e6          # 16 min, then scores all 13 checkpoints
+.venv/bin/python labs/08-isaac-lab/eval_in_mujoco.py labs/08-isaac-lab/models/ppo_v7_isaac_1270.npz
+```
+
+GPU score (episodes were ~13.5 s long from the first iteration — v6 started at 0.3 s):
+
+| | survive | tilt rms | action jerk rms |
+|---|---|---|---|
+| LQR | 85.2 % | 3.39° | 1.49 |
+| v7 it 127 | 86.2 % | 3.37° | 1.42 |
+| v7 it 635 | 83.1 % | 2.96° | 1.13 |
+| v7 it 1270 | 83.1 % | 2.81° | 1.19 |
+
+Lab 07 battery in MuJoCo:
+
+| test | LQR | v7 it 127 | v7 it 635 | v7 it 1270 |
+|---|---|---|---|---|
+| standing wobble | ±0.42°, 20 Hz, 45 % sat. | ±0.41°, 36 % | **±0.08°, 0 %** | **±0.29°, 0 %** |
+| still | ±0.7 cm ±0.43° | ±0.6 cm ±0.41° | ±0.9 cm ±0.10° | ±1.0 cm ±0.30° |
+| still, setpoint +2.75° | ±0.7 cm | ±0.7 cm | **±27 cm** | **±47 cm** |
+| joystick drive | 9.4° | 9.3° | 8.8° | 8.7° |
+| demo | 9.6 cm off | 9.4 cm | 12.1 cm | 12.2 cm |
+| push ladder | 6 N | 6 N | 4 N | 4 N |
+| grout at 0.3 m/s | 9.0° | 8.7° | 7.2° | 7.3° |
+| 50 random robots (diff 1.0) | 32/50 | 28/50 | 23/50 | 29/50 |
+| 50 random robots (diff 0.8) | 43/50 | 38/50 | 40/50 | 41/50 |
+
+What it learned: to **cancel the LQR's chatter** — standing goes from 45 % saturated at 20 Hz to 0 % and the tilt
+drops (±0.08° at it 635), and it tilts less driving and on grout. The price is the same as v6 in a milder form: it
+softens the LQR's position hold, so a constant setpoint error makes it creep (27–47 cm instead of 0.7 cm, but it no
+longer falls or drives away for metres), pushes drop to 4 N and it loses a few random robots. Early checkpoints
+(it 127) are basically the LQR. **Best of all versions so far, but still not ≥ LQR on every line: not for the robot.**
+
+Next to try (one change each): a reward term for wandering off the start point with a setpoint error (the creep is
+the failing line), or a smaller correction (±0.5 m/s²) so it can't override the position hold.
+
 ## Next
 
-3. Train with thousands of robots in parallel; compare with v3/v4/v5.
+- v8: one of the two changes above, same battery, same rule (≥ LQR on every line before the robot).
+- If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).

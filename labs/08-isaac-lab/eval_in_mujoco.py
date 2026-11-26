@@ -19,16 +19,38 @@ import sim  # noqa: E402
 import train as T  # noqa: E402
 
 
+def lqr_from_obs(o):
+    """Copy of sbr_env.lqr_from_obs (that module needs warp/newton, not installed here); checked against lab 07 below."""
+    f = o[..., -8:]
+    a = 7.44 * f[..., 0] + 7.07 * f[..., 1] + (5.534 * f[..., 3] + 7.02 * f[..., 2] + f[..., 5]).clip(-5, 5)
+    return (a / E.A_MAX).clip(-1, 1)
+
+
 class NpzPolicy:
-    """tanh MLP from train.py export; same call as a stable-baselines3 model in lab 07's battery."""
+    """tanh MLP from train.py export; same call as a stable-baselines3 model in lab 07's battery.
+    v7 (residual > 0): action = LQR + residual × network."""
 
     def __init__(self, path):
         self.w = np.load(path)
+        self.res = float(self.w["residual"]) if "residual" in self.w else 0.0
 
     def predict(self, obs, deterministic=True):
         h = np.tanh(obs @ self.w["W0"] + self.w["b0"])
         h = np.tanh(h @ self.w["W1"] + self.w["b1"])
-        return np.clip(h @ self.w["W2"] + self.w["b2"], -1, 1).astype(np.float32), None
+        a = np.clip(h @ self.w["W2"] + self.w["b2"], -1, 1)
+        if self.res:
+            a = np.clip(lqr_from_obs(obs) + self.res * a, -1, 1)
+        return a.astype(np.float32), None
+
+
+def _check_lqr():
+    e = E.BalanceEnv(difficulty=1.0, scenario="mixed")
+    o, _ = e.reset(seed=3)
+    for _ in range(400):
+        assert abs(lqr_from_obs(o) - E.lqr_policy(e)[0]) < 1e-4
+        o, _, f, t, _ = e.step(E.lqr_policy(e))
+        if f or t:
+            break
 
 
 def wobble(act):
@@ -51,6 +73,7 @@ def wobble(act):
 
 
 if __name__ == "__main__":
+    _check_lqr()
     print(f"{'LQR':28}", wobble(lambda o, e: E.lqr_policy(e)))
     for path in sys.argv[1:]:
         p = NpzPolicy(path)
