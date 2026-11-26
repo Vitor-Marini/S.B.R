@@ -23,3 +23,4 @@ labs/08-isaac-lab/models/*.npz
 !labs/08-isaac-lab/models/ppo_v7_isaac_1270.npz
 !labs/08-isaac-lab/models/ppo_v8_isaac_381.npz
 !labs/08-isaac-lab/models/ppo_v8_isaac_1143.npz
+!labs/08-isaac-lab/models/ppo_v9_isaac_762.npz

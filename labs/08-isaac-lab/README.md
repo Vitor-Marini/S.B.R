@@ -189,9 +189,34 @@ leaving ≈ 0.44 m/s². A **constant** correction bigger than that pins ex at th
 The network learned a constant offset (which helps on average in the randomized robots) that the real robot's
 setpoint error turns into creep.
 
+## Step 6: v9 = v7 + high-passed correction — the setpoint line is fixed
+
+The network's correction goes through a high-pass (correction − its low-pass, τ = 0.5 s): a constant correction fades
+to zero in ~3 s, so standing still it is exactly the LQR for any setpoint error; fast corrections pass. The drift cost
+of v8 is gone. `train.py score` now also runs the failing line (still, +2.75°, 256 robots) — it reproduces MuJoCo
+(v7 it 1270 creeps 55 cm there too, the LQR 0.5 cm). On the robot this costs one extra float in the firmware.
+
+GPU score: every checkpoint creeps ≤ 0.5 cm with the setpoint error; survival 84–86 % (LQR 85 %); action jerk −20 %.
+
+| test | LQR | v9 it 762 | v9 it 889 | v9 it 1524 |
+|---|---|---|---|---|
+| standing wobble | ±0.42°, 20 Hz, 45 % sat. | **±0.29°, 0 %** | ±0.32°, 0 % | ±0.93°, 2 % |
+| still | ±0.7 cm ±0.43° | ±1.1 cm **±0.18°** | ±2.4 cm ±0.38° | ±4.7 cm ±1.04° |
+| still, setpoint +2.75° | ±0.7 cm | **±0.7 cm** | **±0.7 cm** | **±0.6 cm** |
+| joystick drive | 9.4° | 9.7° | 9.7° | 10.5° |
+| demo | 9.6 cm off | 11.0 cm | 11.9 cm | 12.4 cm |
+| push ladder | 6 N | 4 N | 4 N | 4 N |
+| grout at 0.3 m/s | 9.0° | 8.5° | 8.5° | 9.3° |
+| 50 random robots (diff 1.0) | 32/50 | 29/50 | 26/50 | 26/50 |
+| 50 random robots (diff 0.8) | 43/50 | 42/50 | 39/50 | 40/50 |
+
+The creep is gone (v7/v8: 27–47 cm) and it 762 keeps the chatter win (0 % saturated, tilt ±0.18° standing). Still not
+≥ LQR everywhere: **pushes 4 N instead of 6 N** (every learned version v6–v9 lost here), a few random robots fewer,
+the demo ends 1.4 cm farther and joystick tilt is 0.3° higher. Late checkpoints get worse (it 1524 sways ±1°): the
+mid-training ones are the ones to keep. Not for the robot yet.
+
 ## Next
 
-- v9: high-pass the correction (correction − its low-pass, τ ≈ 0.5–1 s): it can still cancel the 20 Hz chatter, but its
-  long-run mean is zero, so in steady state it is exactly the LQR for any setpoint error. Remove the drift cost; add the
-  +2.75° still test to `train.py score`.
+- v10: find why pushes drop to 4 N (log the correction during the 6 N push in MuJoCo: does it fight the LQR's
+  recovery?) — the same measure-first approach that found v7's creep.
 - If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).

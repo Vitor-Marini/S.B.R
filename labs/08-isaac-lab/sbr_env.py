@@ -12,7 +12,10 @@ v7 (residual=0.25): action = firmware LQR + network × ±1 m/s². The robot star
 corrections; the effort penalty applies to the correction only (the LQR itself is saturated 45 % of the time). The
 critic also sees what the robot can't (true tilt, setpoint error, the randomized physics): the "critic" obs group.
 v8 = v7 + drift cost: distance from the commanded path WITHOUT the slip limit (ex is clamped at 9 cm and xref slides,
-so in v7 creeping 47 cm cost the same as 9 cm — the one battery line v7 failed).
+so in v7 creeping 47 cm cost the same as 9 cm — the one battery line v7 failed). Negative result, removed in v9.
+v9 = v7 + high-passed correction (correction − its low-pass, HP_TAU): measured, v7/v8 learned a constant +1 m/s² that,
+with a setpoint error, eats the LQR's position hold and makes it creep. A high-passed correction has zero long-run
+mean, so standing still it is exactly the LQR; the fast part (the chatter cancellation) passes.
 
     python labs/08-isaac-lab/sbr_env.py     → selftest: LQR survives, zero action falls, speed
 """
@@ -43,7 +46,7 @@ W_TH_START, W_TH_END = 4.0, 0.5   # v6: tilt weight tightened 4° (v5) → 0.5°
                                   # the start, any tilt > 3° saturates the state cost: a robot that can't balance yet
                                   # only learns 'use less action' and falls (measured: 0.3 s episodes after 300M)
 COST_SCALE = 40.0
-W_DRIFT = 0.15               # v8: m off the commanded path (∫vr dt, no slip reset); LQR with a 2.75° setpoint ≈ 7 cm
+HP_TAU = 0.5                 # v9: s, high-pass time constant of the network correction
 PHYS_EVERY = 20             # ticks between batched physics randomizations (see _refresh_physics)
 RING = 4                     # delay buffers: sensor delay 1–3 ticks, actuator 0–2
 NQ, NDOF, NBODY = 9, 8, 3    # per robot: free joint (7) + 2 wheels; bodies: body, wheel_left, wheel_right
@@ -58,12 +61,12 @@ def rotate_inv(q, v):
 
 class SbrEnv:
     def __init__(self, num_envs=4096, device="cuda:0", seed=0, difficulty=0.2, curriculum_ticks=0, d_max=0.8,
-                 w_th=(W_TH_START, W_TH_END), residual=0.0):
+                 w_th=(W_TH_START, W_TH_END), residual=0.0, hp_tau=0.0):
         self.num_envs, self.num_actions, self.device = num_envs, 1, device
         self.max_episode_length = int(EPISODE_S / DT)
         self.cfg = {}
         self.difficulty, self.curriculum_ticks, self.d_max, self.ticks = difficulty, curriculum_ticks, d_max, 0
-        self.w_th_range, self.residual = w_th, residual
+        self.w_th_range, self.residual, self.hp_tau = w_th, residual, hp_tau        # hp_tau 0 = v7 (no high-pass)
         self.w_th = w_th[0] if curriculum_ticks else w_th[1]
         self.g = torch.Generator(device=device).manual_seed(seed)
         self._build_world()
@@ -72,7 +75,7 @@ class SbrEnv:
         # controller / reference state (lab 07: PolicyController + Reference)
         for k in ("wheel", "x", "ex", "action", "prev_action", "bias", "bias_drift", "filt", "pitch_m", "rate_m",
                   "v_target", "w_target", "vr", "ar", "xref", "wr", "goal", "x0", "p", "v", "next_cmd",
-                  "push_f", "push_until", "bump_tq", "bump_until", "noise", "dist", "slope", "mass_scale", "l_scale", "res", "xfree"):
+                  "push_f", "push_until", "bump_tq", "bump_until", "noise", "dist", "slope", "mass_scale", "l_scale", "res", "xfree", "res_lp"):
             setattr(self, k, z(n))
         self.scenario = torch.zeros(n, dtype=torch.long, device=device)   # 0 still, 1 joystick, 2 moves, 3 mixed
         self.delay = torch.ones(n, dtype=torch.long, device=device)
@@ -192,7 +195,7 @@ class SbrEnv:
         newton.eval_fk(self.m, self.s0.joint_q, self.s0.joint_qd, self.s0, mask=self.reset_mask_wp)
         self.vprev[ids] = 0.0
         for k in ("wheel", "x", "ex", "action", "prev_action", "v_target", "w_target", "vr", "ar", "xref", "wr",
-                  "goal", "x0", "p", "v", "next_cmd", "push_f", "push_until", "bump_tq", "bump_until", "rate_m", "res", "xfree"):
+                  "goal", "x0", "p", "v", "next_cmd", "push_f", "push_until", "bump_tq", "bump_until", "rate_m", "res", "xfree", "res_lp"):
             getattr(self, k)[ids] = 0.0
         self.filt[ids] = pitch0
         self.pitch_m[ids] = pitch0 + self.bias[ids]
@@ -222,7 +225,8 @@ class SbrEnv:
                             (self.mu[:, 0] - 0.8) * 5, self.dist / 0.015,
                             torch.where(t < self.push_until, self.push_f, 0.0) / 6,
                             torch.where(t < self.bump_until, self.bump_tq, 0.0) / 0.25,
-                            torch.full_like(t, self.difficulty), (self.x - self.xfree) / 0.2], 1).clamp(-10, 10)
+                            torch.full_like(t, self.difficulty), (self.x - self.xfree) / 0.2,
+                            self.res_lp / 0.25], 1).clamp(-10, 10)
 
     # ---------------------------------------------------------------- one control tick (5 ms)
     def _events(self):
@@ -280,7 +284,10 @@ class SbrEnv:
         a = actions.reshape(n).clamp(-1, 1)
         prev_res = self.res
         if self.residual:                       # v7: LQR on the same observation + bounded correction
-            self.res = a * self.residual
+            raw = a * self.residual
+            if self.hp_tau:
+                self.res_lp = self.res_lp + (raw - self.res_lp) * (DT / self.hp_tau)
+            self.res = raw - self.res_lp
             a = (lqr_from_obs(self.hist.reshape(n, -1).clamp(-10, 10)) + self.res).clamp(-1, 1)
         self.prev_action, self.action = self.action, a
         self._events()
@@ -332,7 +339,7 @@ class SbrEnv:
         pitch = self.true_pitch()
         th = pitch - torch.rad2deg(self.ar / G)
         state = ((self.ex / W_X) ** 2 + ((self.wheel - self.vr) / W_V) ** 2 + (th / self.w_th) ** 2
-                 + (self.rate_m / W_W) ** 2 + ((self.x - self.xfree) / W_DRIFT) ** 2 * (self.residual > 0))
+                 + (self.rate_m / W_W) ** 2)
         if self.residual:
             effort = (self.res * A_MAX / W_A) ** 2 + ((self.res - prev_res) * A_MAX / W_JERK) ** 2
         else:
@@ -384,13 +391,17 @@ def _selftest():
         if fallen.all():
             break
     assert fallen.all(), "zero action must fall"
-    env = SbrEnv(num_envs=1024, difficulty=0.8, seed=1, residual=0.25)        # residual + zero net = the LQR
+    env = SbrEnv(num_envs=1024, difficulty=0.8, seed=1, residual=0.25, hp_tau=HP_TAU)        # residual + zero net = the LQR
     alive = torch.ones(1024, dtype=torch.bool, device=env.device)
     for _ in range(int(10 / DT)):
         _, _, done, ex = env.step(lqr_actions(env))
         alive &= ~(done & ~ex["time_outs"])
     print(f"residual env, zero correction: survives in {alive.float().mean() * 100:.0f}%")
-    assert alive.float().mean() > 0.7 and env.get_observations()["critic"].shape == (1024, 13)
+    assert alive.float().mean() > 0.7 and env.get_observations()["critic"].shape == (1024, 14)
+    for _ in range(int(3 / DT)):                                             # constant network output → no correction
+        env.step(torch.ones(1024, 1, device=env.device))
+    young = env.episode_length_buf > int(3 / DT)
+    assert young.any() and env.res[young].abs().max() < 0.01, env.res[young].abs().max()
     print("selftest ok")
 
 

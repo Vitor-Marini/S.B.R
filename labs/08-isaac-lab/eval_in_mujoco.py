@@ -28,18 +28,27 @@ def lqr_from_obs(o):
 
 class NpzPolicy:
     """tanh MLP from train.py export; same call as a stable-baselines3 model in lab 07's battery.
-    v7 (residual > 0): action = LQR + residual × network."""
+    v7 (residual > 0): action = LQR + residual × network. v9 (hp_tau > 0): the correction is high-passed, so the policy
+    has one state float (the firmware will too), reset when an episode starts."""
 
     def __init__(self, path):
         self.w = np.load(path)
         self.res = float(self.w["residual"]) if "residual" in self.w else 0.0
+        self.tau = float(self.w["hp_tau"]) if "hp_tau" in self.w else 0.0
+        self.lp = 0.0
 
     def predict(self, obs, deterministic=True):
         h = np.tanh(obs @ self.w["W0"] + self.w["b0"])
         h = np.tanh(h @ self.w["W1"] + self.w["b1"])
         a = np.clip(h @ self.w["W2"] + self.w["b2"], -1, 1)
         if self.res:
-            a = np.clip(lqr_from_obs(obs) + self.res * a, -1, 1)
+            raw = self.res * a
+            if self.tau:
+                if np.array_equal(obs[:8], obs[8:16]) and np.array_equal(obs[8:16], obs[16:]):
+                    self.lp = 0.0         # lab 07 reset fills the history with 3 equal frames: new episode
+                self.lp = self.lp + (raw - self.lp) * (sim.DT / self.tau)
+                raw = raw - self.lp
+            a = np.clip(lqr_from_obs(obs) + raw, -1, 1)
         return a.astype(np.float32), None
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Train on the GPU with Isaac Lab's PPO (rsl_rl), thousands of robots at once.
 
-    python labs/08-isaac-lab/train.py [steps]            → v8 residual + drift cost (default 300M), checkpoints in
-                                                           logs/sbr_v8/, exports models/ppo_v8_isaac_<it>.npz, scores
-                                                           them all (v7 = commit f8bc142)
+    python labs/08-isaac-lab/train.py [steps]            → v9 residual, high-passed (default 300M), checkpoints in
+                                                           logs/sbr_v9/, exports models/ppo_v9_isaac_<it>.npz, scores
+                                                           them all (v7 = commit f8bc142, v8 = d191aa8)
     python labs/08-isaac-lab/train.py [steps] --v6       → v6 (network alone, critic = actor inputs)
     python labs/08-isaac-lab/train.py export model.pt    → .pt checkpoint → .npz (weights for lab 07's battery and
                                                            export.py)
@@ -30,7 +30,7 @@ D_MAX = 0.8                   # same curriculum as lab 07 v5/v6: 0.2 → 0.8 ove
 RESIDUAL = 0.25               # v7: correction up to ±0.25 × 4 = ±1 m/s² on top of the LQR
 
 
-def runner_cfg(iterations, name="sbr_v8", residual=True):
+def runner_cfg(iterations, name="sbr_v9", residual=True):
     from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
     cfg = RslRlOnPolicyRunnerCfg(
         num_steps_per_env=STEPS_PER_ENV, max_iterations=iterations, save_interval=max(1, iterations // 12),
@@ -59,16 +59,18 @@ def export(pt, out, residual=0.0):
         arrays[f"W{i}"] = w.numpy().T
         arrays[f"b{i}"] = actor[k[:-len("weight")] + "bias"].numpy()
     assert [a.shape for a in arrays.values()][::2] == [(24, 64), (64, 64), (64, 1)], [a.shape for a in arrays.values()]
-    np.savez(out, residual=np.float32(residual), **arrays)   # residual > 0: action = LQR + residual × network
+    import sbr_env as S
+    np.savez(out, residual=np.float32(residual), hp_tau=np.float32(S.HP_TAU if residual else 0), **arrays)   # residual > 0: action = LQR + residual × network
     return out
 
 
 def train(steps, w_th=None, residual=RESIDUAL):
     import sbr_env as S
     from rsl_rl.runners import OnPolicyRunner
-    name = "sbr_v8" if residual else "sbr_v6"
+    name = "sbr_v9" if residual else "sbr_v6"
     iterations = int(steps / (N_ENVS * STEPS_PER_ENV))
     env = S.SbrEnv(num_envs=N_ENVS, curriculum_ticks=int(0.6 * steps / N_ENVS), d_max=D_MAX, residual=residual,
+                   hp_tau=S.HP_TAU if residual else 0.0,
                    **({"w_th": w_th} if w_th else {}))
     log_dir = os.path.join(HERE, "logs", name, time.strftime("%Y-%m-%d_%H-%M-%S"))
     runner = OnPolicyRunner(env, runner_cfg(iterations, name, bool(residual)), log_dir=log_dir, device="cuda:0")
@@ -93,27 +95,37 @@ def score(paths, n=4096, d=0.8, seconds=10.0, seed=123):
     rows = [("LQR", None)] + [(os.path.basename(p), dict(np.load(p))) for p in paths]
     for label, w in rows:
         res = float(w["residual"]) if w is not None and "residual" in w else 0.0
-        env = S.SbrEnv(num_envs=n, difficulty=d, seed=seed, residual=res)
-        W = {k: torch.tensor(v, device=env.device) for k, v in (w or {}).items() if k != "residual"}
+        tau = float(w["hp_tau"]) if w is not None and "hp_tau" in w else 0.0
+        env = S.SbrEnv(num_envs=n, difficulty=d, seed=seed, residual=res, hp_tau=tau)
+        W = {k: torch.tensor(v, device=env.device) for k, v in (w or {}).items() if k[0] in "Wb"}
+
+        def act(env):
+            if not W:
+                return S.lqr_actions(env)
+            o = env.get_observations()["policy"]
+            h = torch.tanh(torch.tanh(o @ W["W0"] + W["b0"]) @ W["W1"] + W["b1"])
+            return (h @ W["W2"] + W["b2"]).clamp(-1, 1)
         alive = torch.ones(n, dtype=torch.bool, device=env.device)
         tilt, jerk, rew, drift = 0.0, 0.0, 0.0, 0.0
         ticks = int(seconds / S.DT)
         for _ in range(ticks):
-            o = env.get_observations()["policy"]
-            if W:
-                h = torch.tanh(torch.tanh(o @ W["W0"] + W["b0"]) @ W["W1"] + W["b1"])
-                a = (h @ W["W2"] + W["b2"]).clamp(-1, 1)
-            else:
-                a = S.lqr_actions(env)
-            _, r, done, ex = env.step(a)
+            _, r, done, ex = env.step(act(env))
             alive &= ~(done & ~ex["time_outs"])
             th = env.true_pitch() - torch.rad2deg(env.ar / S.G)
             tilt += (th[alive] ** 2).mean().item()
             jerk += (((env.action - env.prev_action) * S.A_MAX)[alive] ** 2).mean().item()
             rew += r.mean().item()
             drift += ((env.x - env.xfree)[alive] ** 2).mean().item()
+        x0 = None                              # the line v7/v8 failed: standing still with a +2.75° setpoint error
+        env = S.SbrEnv(num_envs=256, difficulty=0.0, seed=seed, residual=res, hp_tau=tau)
+        env.bias[:], env.bias_drift[:], env.scenario[:] = 2.75, 0.0, 0
+        for k in range(int(14 / S.DT)):        # < 15 s episode: no timeout reset
+            env.step(act(env))
+            if k == int(3 / S.DT):
+                x0 = env.x.clone()
+        creep = (env.x - x0).abs().median().item() * 100
         print(f"{label:28} survive {alive.float().mean().item() * 100:5.1f}%  tilt rms {math.sqrt(tilt / ticks):.2f}°  "
-              f"jerk rms {math.sqrt(jerk / ticks):.2f} m/s²/tick  drift rms {math.sqrt(drift / ticks) * 100:.1f} cm", flush=True)
+              f"jerk rms {math.sqrt(jerk / ticks):.2f} m/s²/tick  drift rms {math.sqrt(drift / ticks) * 100:.1f} cm  sp+2.75° creep {creep:.1f} cm", flush=True)
         del env
 
 
