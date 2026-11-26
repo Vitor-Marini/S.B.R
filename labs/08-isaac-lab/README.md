@@ -166,7 +166,32 @@ longer falls or drives away for metres), pushes drop to 4 N and it loses a few r
 Next to try (one change each): a reward term for wandering off the start point with a setpoint error (the creep is
 the failing line), or a smaller correction (±0.5 m/s²) so it can't override the position hold.
 
+## Step 5: v8 = v7 + drift cost — negative result
+
+Idea: v7's reward only saw `ex`, which is clamped at the 9 cm slip limit (and xref slides), so creeping far cost no
+more than 9 cm. v8 added a cost on the distance from the commanded path without the slip reset (∫vr dt, 0.15 m).
+
+It did not work: GPU drift rms went **up** during training (28 → 55 cm; the LQR itself scores 27 cm on this metric,
+because pushes past the slip limit and move starts legitimately move the path), and in MuJoCo it 1143 creeps 47 cm with
+the +2.75° setpoint exactly like v7. The actor can't see that distance (only the critic does), and most of the cost is
+unavoidable even for the LQR — wrong lever.
+
+**The actual cause, measured in MuJoCo** (still, setpoint +2.75°, after 3 s):
+
+| | ex | network correction | x over 17 s |
+|---|---|---|---|
+| v7 it 1270 | −9.0 cm (at the slip limit 100 % of the time) | **+1.00 m/s² constant** (its max) | −23 → −117 cm |
+| v8 it 1143 | −9.0 cm (100 %) | **+1.00 m/s²** | −24 → −118 cm |
+| v8 it 381 | −8.9 cm (84 %) | +0.33 m/s² | −12 → −19 cm |
+
+With a 2.75° setpoint error the LQR spends 0.744 × 2.75 ≈ 2.05 m/s² of its position hold (27.67 × 0.09 ≈ 2.49 m/s²),
+leaving ≈ 0.44 m/s². A **constant** correction bigger than that pins ex at the slip limit and xref slides: steady creep.
+The network learned a constant offset (which helps on average in the randomized robots) that the real robot's
+setpoint error turns into creep.
+
 ## Next
 
-- v8: one of the two changes above, same battery, same rule (≥ LQR on every line before the robot).
+- v9: high-pass the correction (correction − its low-pass, τ ≈ 0.5–1 s): it can still cancel the 20 Hz chatter, but its
+  long-run mean is zero, so in steady state it is exactly the LQR for any setpoint error. Remove the drift cost; add the
+  +2.75° still test to `train.py score`.
 - If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).

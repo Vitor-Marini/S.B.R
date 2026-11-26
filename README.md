@@ -35,7 +35,7 @@ flowchart LR
 | 05 | [Web control](labs/05-web-control/) | the robot serves a control page; WebSocket; Gamepad API | ✅ in use |
 | 06 | [Kinect navigation](labs/06-kinect-navigation/) | depth camera: floor plane, robot tracking, click-to-go | ⏸ works, paused |
 | 07 | [MuJoCo + reinforcement learning](labs/07-mujoco-rl/) | simulate the robot, train a policy, compare with LQR | ⏸ paused · best policy v3 ran on the robot |
-| 08 | [Isaac Lab](labs/08-isaac-lab/) | the same robot, thousands at once on the RTX GPU | 🟡 v7 residual: best so far, not for the robot yet |
+| 08 | [Isaac Lab](labs/08-isaac-lab/) | the same robot, thousands at once on the RTX GPU | 🟡 v7/v8 residual: kills the LQR chatter, still creeps with setpoint error |
 
 ## Repository
 
