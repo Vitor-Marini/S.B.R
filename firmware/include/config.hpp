@@ -46,7 +46,7 @@ public:
 
     // LQR (labs/03-lqr, lqr.py pesos "suave"): a = kt·θ + kw·ω + kx·(x − x_ref) + kv·(v − v_ref) + a_ref
     bool useLqr = false;      // `ctl lqr` / `ctl pid` (só fora do equilíbrio)
-    bool useRl = false;       // `ctl rl`: rede do labs/07 no lugar do LQR. NÃO é salvo: religou, volta pro LQR
+    bool useRl = false;       // `ctl rl`: LQR + correção da rede v11 (labs/08). NÃO é salvo: religou, volta pro LQR
     float lqrKx = 27.67f;     // m/s² por m (à frente do lugar → acelera pra frente: inclina pra trás e volta)
     float lqrKv = 14.04f;     // m/s² por m/s
     float lqrKt = 0.744f;     // m/s² por ° (PD: kp 0,35)

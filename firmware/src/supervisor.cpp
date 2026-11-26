@@ -172,7 +172,7 @@ void Supervisor::_runActive() {
     balance.setTurnOffset(velCtrl.getTurnOffset());
     balance.setSpeedFF(cfg.useLqr ? 0.0f : velCtrl.getRampedTarget());  // no LQR a velocidade entra por kv
     balance.setExtraAccel(cfg.useLqr ? velCtrl.getLqrAccel() : 0.0f);
-    balance.setRlState(velCtrl.rlPosErr(), velCtrl.rlVelErr());
+    balance.setRlState(velCtrl.rlPosErr(), velCtrl.rlVelErr(), velCtrl.rlRefV(), velCtrl.rlRefA(), velCtrl.rampedTurn());
     balance.compute();
 }
 

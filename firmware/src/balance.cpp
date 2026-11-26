@@ -2,7 +2,6 @@
 #include "config.hpp"
 #include "imu_manager.hpp"
 #include "motor.hpp"
-#include "rl_policy.h"
 #include <math.h>
 
 BalanceController balance;
@@ -29,10 +28,10 @@ void BalanceController::compute() {
     float kp = cfg.useLqr ? cfg.lqrKt : cfg.anglePid.kp, kd = cfg.useLqr ? cfg.lqrKw : cfg.anglePid.kd;
     float accel = kp * _angleError + kd * pitchRate + _extra;
     if (cfg.useRl) {
-        // rede do labs/07 (mesmas entradas do env.py): troca a soma do LQR inteira; o teto de 4 m/s² abaixo vale igual
-        const float in[5] = {_angleError / 10.0f, pitchRate / 100.0f, _rlVel / 0.5f, _rlPos / 0.2f, _rlLast};
-        _rlLast = rl_policy(in);
-        accel = 4.0f * _rlLast;
+        // v11 (labs/08): LQR + correção da rede (passa-alta), tudo no rl_step; mesmo quadro do sbr_env.py
+        const float f[7] = {_angleError / 10.0f, pitchRate / 100.0f, _rlVel / 0.5f, _rlPos / 0.2f,
+                            _rlRefV / 0.5f, _rlRefA, _rlTurn / 45.0f};
+        accel = 4.0f * rl_step(&_rl, f, dt);
     }
     // LQR: teto no que o motor entrega de verdade. Acima disso o stepper perde passo, a roda real fica pra trás da
     // comandada (e da odometria) e o controle perde a referência: os empurrões pediam 11 m/s² e caía. O LQR com
@@ -53,7 +52,7 @@ void BalanceController::compute() {
 }
 
 void BalanceController::resetIntegral() {
-    _rlLast = 0.0f;
+    rl_reset(&_rl);
     _speed = 0.0f;
     _ff = 0.0f;
     _wheel = 0.0f;

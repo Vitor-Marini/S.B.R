@@ -23,6 +23,9 @@ public:
     float getLqrAccel() { return _lqrAccel; }  // LQR: kx·(x − x_ref) + kv·(v − v_ref) + a_ref (m/s²)
     float rlPosErr() { return _rlPosErr; }     // RL: x − x_ref (m), v − v_ref (m/s): entradas da rede
     float rlVelErr() { return _rlVelErr; }
+    float rlRefV() { return _rlRefV; }         // RL: v_ref (m/s), a_ref (m/s²), giro pedido em rampa (°/s)
+    float rlRefA() { return _rlRefA; }
+    float rampedTurn() { return _rampedTurn; }
     void reset();
 
 private:
@@ -43,7 +46,7 @@ private:
     void _updateCascade(float dt);
     void _updateLqr(float dt);
     float _x = 0.0f, _xRef = 0.0f, _moveStartX = 0.0f, _lqrAccel = 0.0f;  // LQR (m)
-    float _rlPosErr = 0.0f, _rlVelErr = 0.0f;
+    float _rlPosErr = 0.0f, _rlVelErr = 0.0f, _rlRefV = 0.0f, _rlRefA = 0.0f;
     // m: mais longe que isso da referência, ela vem junto (limitado por 2,5/kx no código: kx·slip abaixo do teto,
     // senão fica cego pra posição — com 0,3 m e kx 27,7 o empurrão virava vai-e-vem crescente)
     static constexpr float LQR_SLIP_M = 0.3f;

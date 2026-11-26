@@ -225,9 +225,9 @@ void CLI::_processLine(const String& line) {
                                                 : cfg.useLqr ? "LQR (save pra manter)" : "PD + cascata (save pra manter)");
     } else if (command == "rltime") {
         // rltime — quanto a rede leva na ESP (sem FPU: ponto flutuante emulado). O loop inteiro tem 5000 us
-        float in[5] = {0.1f, -0.2f, 0.05f, 0.1f, 0.0f}, out = 0.0f;
+        float in[RL_IN] = {0.1f, -0.2f, 0.05f, 0.1f}, out = 0.0f;
         uint32_t t0 = micros();
-        for (int i = 0; i < 100; i++) { in[4] = out * 0.001f; out = rl_policy(in); }
+        for (int i = 0; i < 100; i++) { in[7] = out * 0.001f; out = rl_policy(in); }
         term.printf("rede: %.0f us por chamada (saida %.3f)\n", (micros() - t0) / 100.0f, out);
     } else if (command == "move") {
         // move <cm> — anda e para no alvo (+ = frente), responde "move ok"; só equilibrando
@@ -259,7 +259,7 @@ void CLI::_printHelp() {
     term.println("  motor <L|R|both> <steps/s> → Teste manual de motor");
     term.println("  drive <m/s> <°/s> → Andar/virar (+ = frente / esquerda). Repetir a 10-20 Hz");
     term.println("  turn <graus>      → Girar no lugar (+ = esquerda), ex.: turn 90");
-    term.println("  ctl [lqr|pid|rl]  → Controle: LQR, PD + cascata ou a rede do labs/07 (fora do equilíbrio)");
+    term.println("  ctl [lqr|pid|rl]  → Controle: LQR, PD + cascata ou LQR + rede v11 do labs/08 (fora do equilíbrio)");
     term.println("  rltime            → Tempo da rede na ESP (us)");
     term.println("  move <cm>         → Andar e parar no alvo (+ = frente), ex.: move 50");
     term.println("  motors <L> <R>    → Teste remoto dos motores (passos/s), só IDLE, vale 0,5 s");

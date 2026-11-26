@@ -2,6 +2,7 @@
 #define BALANCE_HPP
 
 #include <Arduino.h>
+#include "rl_policy.h"
 
 // PD de ângulo como ACELERAÇÃO da roda, integrada em velocidade.
 // Stepper impõe velocidade, mas o que levanta o pêndulo é aceleração:
@@ -19,7 +20,9 @@ public:
     void setTurnOffset(float offset) { _turnOffset = offset; }
     void setSpeedFF(float ms) { _ff = ms; }  // velocidade pedida, direto nas rodas
     void setExtraAccel(float a) { _extra = a; }  // LQR: termos de posição/velocidade (m/s²)
-    void setRlState(float posErr, float velErr) { _rlPos = posErr; _rlVel = velErr; }
+    void setRlState(float posErr, float velErr, float refV, float refA, float turn) {
+        _rlPos = posErr; _rlVel = velErr; _rlRefV = refV; _rlRefA = refA; _rlTurn = turn;
+    }
 
     void resetIntegral();  // zera a velocidade integrada (entrar em IDLE/FAULT/ACTIVE)
 
@@ -31,7 +34,8 @@ private:
     float _angleOffset = 0.0f;
     float _turnOffset = 0.0f;  // m/s de diferença entre rodas; positivo = vira à esquerda
     float _extra = 0.0f;
-    float _rlPos = 0.0f, _rlVel = 0.0f, _rlLast = 0.0f;  // RL: entradas e a última ação da rede
+    float _rlPos = 0.0f, _rlVel = 0.0f, _rlRefV = 0.0f, _rlRefA = 0.0f, _rlTurn = 0.0f;  // RL: entradas da rede
+    rl_state_t _rl = {};                  // histórico de 3 quadros, filtro passa-alta, última ação
 };
 
 extern BalanceController balance;
