@@ -283,4 +283,3 @@ enough tries. Each step was found by measuring why the previous one failed, not 
 ## Next
 
 - Port v11 it 150 to the firmware: 24 inputs, LQR + correction, high-pass (one float); test on the stand, then on the floor.
-- If a policy passes: firmware + `export.py` with 24 inputs (and the LQR + correction sum).
